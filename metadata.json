@@ -1,0 +1,6 @@
+{
+  "name": "GMC Marketplace",
+  "description": "The premier e-commerce marketplace for Gelephu Mindfulness City (GMC), Bhutan. Discover local businesses, Bhutanese handicrafts, organic produce, wellness goods, and daily essentials with seamless delivery.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
