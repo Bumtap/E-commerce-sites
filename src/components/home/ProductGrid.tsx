@@ -15,6 +15,7 @@ export const ProductGrid: React.FC<ProductGridProps> = ({
 }) => {
   const {
     products,
+    categories,
     addToCart,
     setActiveProduct,
     toggleWishlist,
@@ -22,16 +23,47 @@ export const ProductGrid: React.FC<ProductGridProps> = ({
     selectedCategoryFilter,
     setSelectedCategoryFilter,
     setIsSearchOpen,
+    setIsSellerPortalOpen,
+    isSellerLoggedIn,
   } = useShop();
 
   const [activeTab, setActiveTab] = useState<'all' | 'made_in_bhutan' | 'organic' | 'new' | 'best_seller'>('all');
 
+  // Find active category object for clean name display
+  const activeCategory = selectedCategoryFilter
+    ? categories.find(
+        (c) =>
+          c.id === selectedCategoryFilter ||
+          c.slug === selectedCategoryFilter ||
+          c.slug === selectedCategoryFilter.replace(/^cat-/, '') ||
+          c.id === `cat-${selectedCategoryFilter}`
+      )
+    : null;
+
   // Filter products according to category filter and tab filter
   const filteredProducts = products.filter((p) => {
     if (!p.isActive) return false;
-    if (selectedCategoryFilter && p.categoryId !== selectedCategoryFilter && p.slug !== selectedCategoryFilter) {
-      return false;
+
+    if (selectedCategoryFilter) {
+      const filterLower = selectedCategoryFilter.toLowerCase();
+      const filterClean = filterLower.replace(/^cat-/, '');
+      const pCatIdClean = (p.categoryId || '').toLowerCase().replace(/^cat-/, '');
+      const pCatName = (p.category || '').toLowerCase();
+
+      const matchesDirectId = p.categoryId === selectedCategoryFilter;
+      const matchesCleanId = pCatIdClean === filterClean;
+      const matchesCategoryObj =
+        activeCategory &&
+        (p.categoryId === activeCategory.id ||
+          pCatIdClean === activeCategory.slug ||
+          pCatName === activeCategory.name.toLowerCase());
+      const matchesText = pCatName.includes(filterClean.replace(/-/g, ' '));
+
+      if (!matchesDirectId && !matchesCleanId && !matchesCategoryObj && !matchesText) {
+        return false;
+      }
     }
+
     if (activeTab === 'made_in_bhutan') return p.isMadeInBhutan;
     if (activeTab === 'organic') return p.isOrganic;
     if (activeTab === 'new') return p.isNewArrival;
@@ -47,7 +79,7 @@ export const ProductGrid: React.FC<ProductGridProps> = ({
           <div className="flex items-center gap-2">
             <h2 className="text-xl sm:text-2xl font-extrabold text-slate-900 dark:text-white font-display">
               {selectedCategoryFilter
-                ? `Category: ${products.find((p) => p.categoryId === selectedCategoryFilter)?.category || 'Selected'}`
+                ? `Category: ${activeCategory?.name || products.find((p) => p.categoryId === selectedCategoryFilter)?.category || 'Selected'}`
                 : title}
             </h2>
             {selectedCategoryFilter && (
@@ -89,16 +121,29 @@ export const ProductGrid: React.FC<ProductGridProps> = ({
       {/* Product Grid: 5 cols on lg/xl, 3 on md, 2 on mobile */}
       {filteredProducts.length === 0 ? (
         <div className="text-center py-16 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-8">
-          <p className="text-slate-400 dark:text-slate-500 text-sm font-medium">No products match this filter.</p>
-          <button
-            onClick={() => {
-              setActiveTab('all');
-              setSelectedCategoryFilter(null);
-            }}
-            className="mt-3 bg-teal-700 dark:bg-teal-600 hover:bg-teal-800 dark:hover:bg-teal-500 text-white text-xs font-bold px-4 py-2 rounded-xl cursor-pointer"
-          >
-            Reset Filters
-          </button>
+          <p className="text-slate-500 dark:text-slate-400 text-sm font-semibold">
+            No products currently match this filter.
+          </p>
+          <p className="text-xs text-slate-400 dark:text-slate-500 mt-1 max-w-md mx-auto">
+            Are you a registered merchant in Gelephu? You can list authentic Bhutanese products directly in this category through the Merchant Portal.
+          </p>
+          <div className="mt-4 flex items-center justify-center gap-3">
+            <button
+              onClick={() => {
+                setActiveTab('all');
+                setSelectedCategoryFilter(null);
+              }}
+              className="bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-bold px-4 py-2 rounded-xl transition-colors cursor-pointer"
+            >
+              Reset Filters
+            </button>
+            <button
+              onClick={() => setIsSellerPortalOpen(true)}
+              className="bg-teal-700 dark:bg-teal-600 hover:bg-teal-800 dark:hover:bg-teal-500 text-white text-xs font-bold px-4 py-2 rounded-xl transition-colors cursor-pointer shadow-xs"
+            >
+              {isSellerLoggedIn ? '+ Add Products to Store' : 'Merchant Login & Add Products'}
+            </button>
+          </div>
         </div>
       ) : (
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3.5 sm:gap-5">

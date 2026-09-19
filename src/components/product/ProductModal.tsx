@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useShop } from '../../context/ShopContext';
 import { ProductVariant } from '../../types';
 import { formatNu } from '../../utils/format';
+import { formatWhatsAppUrl } from '../../utils/whatsapp';
 import {
   X,
   Star,
@@ -15,7 +16,8 @@ import {
   Sparkles,
   Plus,
   Minus,
-  MessageSquare
+  MessageSquare,
+  MessageCircle
 } from 'lucide-react';
 
 export const ProductModal: React.FC = () => {
@@ -30,6 +32,9 @@ export const ProductModal: React.FC = () => {
     setIsCheckoutOpen,
     addReview,
     products,
+    currentSeller,
+    isSellerLoggedIn,
+    setIsSellerPortalOpen,
   } = useShop();
 
   const [selectedImageIndex, setSelectedImageIndex] = useState(0);
@@ -264,6 +269,28 @@ export const ProductModal: React.FC = () => {
                   </span>
                   <span className="text-slate-400 dark:text-slate-500">• Origin: {activeProduct.origin}</span>
                 </div>
+
+                {/* Registered Seller Ownership Notice */}
+                {isSellerLoggedIn && currentSeller && currentSeller.storeId === activeProduct.sellerId && (
+                  <div className="mt-3 p-3 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 rounded-xl flex items-center justify-between gap-3 text-xs">
+                    <div className="flex items-center gap-2 text-amber-900 dark:text-amber-200">
+                      <Store className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0" />
+                      <span>
+                        You are logged in as the owner of this item (<strong>{currentSeller.storeName}</strong>).
+                      </span>
+                    </div>
+                    <button
+                      onClick={() => {
+                        setActiveProduct(null);
+                        setIsSellerPortalOpen(true);
+                      }}
+                      className="bg-amber-700 hover:bg-amber-800 text-white font-bold px-2.5 py-1 rounded-lg text-xs shrink-0 transition-colors shadow-2xs cursor-pointer flex items-center gap-1"
+                    >
+                      <span>Edit in Portal</span>
+                      <span>→</span>
+                    </button>
+                  </div>
+                )}
               </div>
 
               {/* Quantity Stepper + Action Buttons */}
@@ -322,6 +349,21 @@ export const ProductModal: React.FC = () => {
                     <span>Buy Now</span>
                   </button>
                 </div>
+
+                {/* WhatsApp Message Seller */}
+                <a
+                  href={formatWhatsAppUrl(
+                    seller?.phone || '+975-17123456',
+                    `Kuzu Zangpo! Hello ${activeProduct.sellerName}, I have a question about "${activeProduct.name}" (${formatNu(currentPrice)}) on GMC Marketplace.`
+                  )}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="w-full mt-2.5 bg-emerald-50 dark:bg-emerald-950/40 hover:bg-emerald-100 dark:hover:bg-emerald-900/50 text-emerald-800 dark:text-emerald-300 border border-emerald-300/80 dark:border-emerald-700/80 font-bold py-2.5 px-4 rounded-xl text-xs flex items-center justify-center gap-2 transition-all cursor-pointer shadow-2xs"
+                  title="Chat directly with seller on WhatsApp"
+                >
+                  <MessageCircle className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+                  <span>WhatsApp Message to Seller</span>
+                </a>
               </div>
             </div>
           </div>
@@ -417,15 +459,30 @@ export const ProductModal: React.FC = () => {
                     </div>
                   </div>
 
-                  <button
-                    onClick={() => {
-                      setActiveStore(seller);
-                      setActiveProduct(null);
-                    }}
-                    className="bg-slate-900 dark:bg-slate-700 hover:bg-teal-800 dark:hover:bg-teal-600 text-white text-xs font-bold px-4 py-2 rounded-xl transition-colors shrink-0 cursor-pointer"
-                  >
-                    Visit Storefront
-                  </button>
+                  <div className="flex flex-wrap items-center gap-2 shrink-0">
+                    <a
+                      href={formatWhatsAppUrl(
+                        seller.phone,
+                        `Kuzu Zangpo! Hello ${seller.name}, I am contacting you via GMC Marketplace regarding "${activeProduct.name}".`
+                      )}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold px-3.5 py-2 rounded-xl transition-all shadow-2xs hover:shadow-sm flex items-center gap-1.5 cursor-pointer"
+                    >
+                      <MessageCircle className="w-3.5 h-3.5" />
+                      <span>WhatsApp Seller</span>
+                    </a>
+
+                    <button
+                      onClick={() => {
+                        setActiveStore(seller);
+                        setActiveProduct(null);
+                      }}
+                      className="bg-slate-900 dark:bg-slate-700 hover:bg-teal-800 dark:hover:bg-teal-600 text-white text-xs font-bold px-4 py-2 rounded-xl transition-colors cursor-pointer"
+                    >
+                      Visit Storefront
+                    </button>
+                  </div>
                 </div>
               )}
 

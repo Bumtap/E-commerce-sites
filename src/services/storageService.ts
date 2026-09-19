@@ -11,7 +11,8 @@ import {
   InventoryTransaction,
   UserProfile,
   Address,
-  OrderStatus
+  OrderStatus,
+  SellerAccount
 } from '../types';
 import {
   INITIAL_PRODUCTS,
@@ -38,7 +39,80 @@ const STORAGE_KEYS = {
   USER_PROFILE: 'gmc_user_profile_v1',
   ANNOUNCEMENT: 'gmc_announcement_v1',
   THEME: 'gmc_theme_mode',
+  SELLERS: 'gmc_sellers_v1',
+  CURRENT_SELLER: 'gmc_current_seller_v1',
+  ADMIN_PASSWORD: 'gmc_admin_password_v1',
+  ADMIN_AUTH: 'gmc_admin_auth_v1',
 };
+
+// Default registered sellers corresponding to initial stores
+export const DEFAULT_SELLERS: SellerAccount[] = [
+  {
+    id: 'seller-organic',
+    email: 'contact@gmcorganic.bt',
+    password: 'seller123',
+    storeId: 'store-gmc-organic',
+    storeName: 'GMC Organic Farm Co-op',
+    ownerName: 'Karma Wangchuk',
+    phone: '+975-6-251080',
+    location: 'GMC Agro-Mindfulness Sector, Gelephu',
+    category: 'Fresh Produce & Groceries',
+    createdAt: '2025-01-10T08:00:00Z',
+    isVerified: true,
+  },
+  {
+    id: 'seller-textiles',
+    email: 'weavers@gelephutextiles.bt',
+    password: 'seller123',
+    storeId: 'store-gelephu-textiles',
+    storeName: 'Gelephu Textile Arts',
+    ownerName: 'Pema Lhamo',
+    phone: '+975-6-253301',
+    location: 'Artisan Square, Gelephu',
+    category: 'Handicrafts & Fashion',
+    createdAt: '2025-01-20T09:00:00Z',
+    isVerified: true,
+  },
+  {
+    id: 'seller-herbal',
+    email: 'info@drukherbal.bt',
+    password: 'seller123',
+    storeId: 'store-druk-herbal',
+    storeName: 'Druk Herbal & Wellness',
+    ownerName: 'Dr. Sonam Tobgay',
+    phone: '+975-6-252190',
+    location: 'Wellness Quarter, Gelephu',
+    category: 'Beauty & Wellness',
+    createdAt: '2025-02-14T09:00:00Z',
+    isVerified: true,
+  },
+  {
+    id: 'seller-honey',
+    email: 'honey@himalayanbee.bt',
+    password: 'seller123',
+    storeId: 'store-himalayan-bee',
+    storeName: 'Himalayan Bee Sanctuary',
+    ownerName: 'Tshering Dorji',
+    phone: '+975-6-254420',
+    location: 'Eco-Corridor, Sarpang Dzongkhag',
+    category: 'Food & Beverages',
+    createdAt: '2025-03-01T08:00:00Z',
+    isVerified: true,
+  },
+  {
+    id: 'seller-tech',
+    email: 'tech@mindfultech.bt',
+    password: 'seller123',
+    storeId: 'store-mindful-tech',
+    storeName: 'Mindful Tech Gelephu',
+    ownerName: 'Kinley Penjor',
+    phone: '+975-6-255590',
+    location: 'GMC Innovation Center',
+    category: 'Electronics & Eco-Tech',
+    createdAt: '2025-02-01T10:00:00Z',
+    isVerified: true,
+  },
+];
 
 // Default current user
 export const DEFAULT_USER: UserProfile = {
@@ -379,6 +453,186 @@ class StorageService {
 
   saveTheme(theme: 'dark' | 'light'): void {
     localStorage.setItem(STORAGE_KEYS.THEME, theme);
+  }
+
+  // --- Seller Authentication & Profiles ---
+  getSellers(): SellerAccount[] {
+    return this.get<SellerAccount[]>(STORAGE_KEYS.SELLERS, DEFAULT_SELLERS);
+  }
+
+  saveSeller(seller: SellerAccount): void {
+    const sellers = this.getSellers();
+    const index = sellers.findIndex((s) => s.id === seller.id || s.email.toLowerCase() === seller.email.toLowerCase());
+    if (index >= 0) {
+      sellers[index] = seller;
+    } else {
+      sellers.push(seller);
+    }
+    this.set(STORAGE_KEYS.SELLERS, sellers);
+  }
+
+  getCurrentSeller(): SellerAccount | null {
+    return this.get<SellerAccount | null>(STORAGE_KEYS.CURRENT_SELLER, null);
+  }
+
+  setCurrentSeller(seller: SellerAccount | null): void {
+    this.set(STORAGE_KEYS.CURRENT_SELLER, seller);
+  }
+
+  registerSeller(
+    data: {
+      storeName: string;
+      ownerName: string;
+      email: string;
+      password: string;
+      phone: string;
+      location: string;
+      category: string;
+      description?: string;
+      logo?: string;
+      coverImage?: string;
+      isVerified?: boolean;
+    },
+    autoLogin: boolean = true
+  ): { success: boolean; message: string; seller?: SellerAccount; store?: Store } {
+    const sellers = this.getSellers();
+    const normalizedEmail = data.email.trim().toLowerCase();
+    
+    if (sellers.some((s) => s.email.toLowerCase() === normalizedEmail)) {
+      return { success: false, message: 'A seller account with this email already exists' };
+    }
+
+    const storeSlug = data.storeName
+      .toLowerCase()
+      .trim()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-|-$/g, '');
+
+    const storeId = `store-${storeSlug}-${Math.floor(100 + Math.random() * 900)}`;
+
+    const newStore: Store = {
+      id: storeId,
+      name: data.storeName.trim(),
+      slug: storeSlug,
+      tagline: `Quality ${data.category} straight from Gelephu Mindfulness City`,
+      description: data.description?.trim() || `${data.storeName} is a verified merchant on the GMC Marketplace.`,
+      logo: data.logo?.trim() || 'https://images.unsplash.com/photo-1544717302-de2939b7ef71?w=150&auto=format&fit=crop&q=80',
+      coverImage: data.coverImage?.trim() || 'https://images.unsplash.com/photo-1500937386664-56d1dfef3854?w=1200&auto=format&fit=crop&q=80',
+      category: data.category,
+      location: data.location.trim(),
+      address: `${data.location.trim()}, Gelephu Mindfulness City, Bhutan`,
+      phone: data.phone.trim(),
+      email: normalizedEmail,
+      openingHours: 'Mon - Sat: 8:00 AM - 6:00 PM',
+      rating: 5.0,
+      reviewCount: 0,
+      productCount: 0,
+      isVerified: data.isVerified !== undefined ? data.isVerified : true,
+      joinedDate: new Date().toISOString().split('T')[0],
+      status: 'approved',
+    };
+
+    const newSeller: SellerAccount = {
+      id: `seller-${Date.now()}`,
+      email: normalizedEmail,
+      password: data.password,
+      storeId: storeId,
+      storeName: data.storeName.trim(),
+      ownerName: data.ownerName.trim(),
+      phone: data.phone.trim(),
+      location: data.location.trim(),
+      category: data.category,
+      description: data.description?.trim(),
+      logo: newStore.logo,
+      coverImage: newStore.coverImage,
+      createdAt: new Date().toISOString(),
+      isVerified: data.isVerified !== undefined ? data.isVerified : true,
+    };
+
+    // Save store to stores list
+    this.saveStore(newStore);
+    // Save seller
+    this.saveSeller(newSeller);
+    
+    // Automatically set as current seller if requested
+    if (autoLogin) {
+      this.setCurrentSeller(newSeller);
+    }
+
+    return { success: true, message: 'Seller account registered successfully', seller: newSeller, store: newStore };
+  }
+
+  deleteSeller(sellerId: string): { success: boolean; message: string } {
+    const sellers = this.getSellers();
+    const toDelete = sellers.find((s) => s.id === sellerId);
+    if (!toDelete) return { success: false, message: 'Seller not found' };
+    
+    const updated = sellers.filter((s) => s.id !== sellerId);
+    this.set(STORAGE_KEYS.SELLERS, updated);
+
+    // If active seller was deleted, logout
+    const current = this.getCurrentSeller();
+    if (current && current.id === sellerId) {
+      this.logoutSeller();
+    }
+    return { success: true, message: `Seller ${toDelete.storeName} removed` };
+  }
+
+  deleteStore(storeId: string): { success: boolean; message: string } {
+    const stores = this.getStores();
+    const toDelete = stores.find((s) => s.id === storeId);
+    if (!toDelete) return { success: false, message: 'Store not found' };
+
+    const updated = stores.filter((s) => s.id !== storeId);
+    this.set(STORAGE_KEYS.STORES, updated);
+    return { success: true, message: `Store ${toDelete.name} removed` };
+  }
+
+  authenticateSeller(email: string, password: string): { success: boolean; message: string; seller?: SellerAccount } {
+    const sellers = this.getSellers();
+    const normalizedEmail = email.trim().toLowerCase();
+    const found = sellers.find((s) => s.email.toLowerCase() === normalizedEmail);
+
+    if (!found) {
+      return { success: false, message: 'No registered seller found with this email' };
+    }
+
+    if (found.password && found.password !== password) {
+      return { success: false, message: 'Incorrect password. Try seller123 or check your credentials.' };
+    }
+
+    this.setCurrentSeller(found);
+    return { success: true, message: `Welcome back, ${found.storeName}!`, seller: found };
+  }
+
+  logoutSeller(): void {
+    this.setCurrentSeller(null);
+  }
+
+  // --- Admin Security & Password ---
+  getAdminPassword(): string {
+    return this.get<string>(STORAGE_KEYS.ADMIN_PASSWORD, 'admin123');
+  }
+
+  setAdminPassword(password: string): void {
+    this.set(STORAGE_KEYS.ADMIN_PASSWORD, password);
+  }
+
+  isAdminAuthenticated(): boolean {
+    return this.get<boolean>(STORAGE_KEYS.ADMIN_AUTH, false);
+  }
+
+  setAdminAuthenticated(auth: boolean): void {
+    this.set(STORAGE_KEYS.ADMIN_AUTH, auth);
+  }
+
+  verifyAdminPassword(input: string): boolean {
+    const actual = this.getAdminPassword();
+    return input.trim() === actual.trim();
+  }
+
+  logoutAdmin(): void {
+    this.setAdminAuthenticated(false);
   }
 
   // Reset to initial demo state

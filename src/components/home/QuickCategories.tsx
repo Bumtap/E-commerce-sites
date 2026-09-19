@@ -5,11 +5,11 @@ import { ChevronRight } from 'lucide-react';
 export const QuickCategories: React.FC = () => {
   const { categories, selectedCategoryFilter, setSelectedCategoryFilter, setIsSearchOpen } = useShop();
 
-  const handleSelect = (slug: string) => {
-    if (selectedCategoryFilter === slug) {
+  const handleSelect = (cat: typeof categories[0]) => {
+    if (selectedCategoryFilter === cat.id || selectedCategoryFilter === cat.slug) {
       setSelectedCategoryFilter(null);
     } else {
-      setSelectedCategoryFilter(slug);
+      setSelectedCategoryFilter(cat.id);
       document.getElementById('featured-products-section')?.scrollIntoView({ behavior: 'smooth' });
     }
   };
@@ -39,11 +39,11 @@ export const QuickCategories: React.FC = () => {
       {/* Circular Category Row matching Reference Template */}
       <div className="flex items-center gap-4 sm:gap-6 overflow-x-auto no-scrollbar py-2 px-1">
         {categories.map((cat) => {
-          const isSelected = selectedCategoryFilter === cat.slug;
+          const isSelected = selectedCategoryFilter === cat.id || selectedCategoryFilter === cat.slug;
           return (
             <button
               key={cat.id}
-              onClick={() => handleSelect(cat.slug)}
+              onClick={() => handleSelect(cat)}
               className="flex flex-col items-center group shrink-0 w-20 sm:w-24 text-center focus:outline-none cursor-pointer"
             >
               {/* Circular Container with double ring effect like reference image */}

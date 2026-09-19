@@ -13,7 +13,8 @@ import {
   UserRole,
   ProductVariant,
   Review,
-  Address
+  Address,
+  SellerAccount
 } from '../types';
 import { storageService, DEFAULT_USER } from '../services/storageService';
 
@@ -96,11 +97,61 @@ interface ShopContextType {
   userRole: UserRole;
   setUserRole: (role: UserRole) => void;
 
+  // Seller Auth & Profiles
+  sellers: SellerAccount[];
+  currentSeller: SellerAccount | null;
+  isSellerLoggedIn: boolean;
+  sellerLogin: (email: string, password: string) => { success: boolean; message: string; seller?: SellerAccount };
+  sellerRegister: (data: {
+    storeName: string;
+    ownerName: string;
+    email: string;
+    password: string;
+    phone: string;
+    location: string;
+    category: string;
+    description?: string;
+    logo?: string;
+    coverImage?: string;
+  }) => { success: boolean; message: string; seller?: SellerAccount };
+  sellerLogout: () => void;
+  addSellerByAdmin: (data: {
+    storeName: string;
+    ownerName: string;
+    email: string;
+    password?: string;
+    phone: string;
+    location: string;
+    category: string;
+    description?: string;
+    logo?: string;
+    coverImage?: string;
+    isVerified?: boolean;
+  }) => { success: boolean; message: string; seller?: SellerAccount; store?: Store };
+  deleteSellerByAdmin: (sellerId: string) => { success: boolean; message: string };
+  deleteStoreByAdmin: (storeId: string) => { success: boolean; message: string };
+
+  // Admin Auth & Security
+  isAdminAuthenticated: boolean;
+  adminLogin: (password: string) => { success: boolean; message: string };
+  adminLogout: () => void;
+  changeAdminPassword: (oldPass: string, newPass: string) => { success: boolean; message: string };
+
   // Management actions
   refreshData: () => void;
   addProduct: (productData: Omit<Product, 'id'>) => Product;
   updateProduct: (productOrId: Product | string, updates?: Partial<Product>) => void;
   deleteProduct: (productId: string) => void;
+  addCategory: (categoryData: {
+    name: string;
+    slug?: string;
+    description?: string;
+    iconName?: string;
+    image?: string;
+    featured?: boolean;
+    order?: number;
+    isActive?: boolean;
+  }) => { success: boolean; message: string; category?: Category };
   updateCategory: (category: Category) => void;
   deleteCategory: (categoryId: string) => void;
   updateStore: (storeOrId: Store | string, updates?: Partial<Store>) => void;
@@ -135,6 +186,14 @@ export const ShopProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const [announcement, setAnnouncement] = useState<string>('');
   const [user, setUser] = useState<UserProfile>(DEFAULT_USER);
   const [orders, setOrders] = useState<Order[]>([]);
+
+  // Seller Auth State
+  const [sellers, setSellers] = useState<SellerAccount[]>(() => storageService.getSellers());
+  const [currentSeller, setCurrentSeller] = useState<SellerAccount | null>(() => storageService.getCurrentSeller());
+  const isSellerLoggedIn = Boolean(currentSeller);
+
+  // Admin Auth State
+  const [isAdminAuthenticated, setIsAdminAuthenticated] = useState<boolean>(() => storageService.isAdminAuthenticated());
 
   // Cart & Wishlist state
   const [cart, setCart] = useState<CartItem[]>([]);
@@ -227,6 +286,9 @@ export const ShopProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     setOrders(storageService.getOrders());
     setCart(storageService.getCart());
     setWishlist(storageService.getWishlist());
+    setSellers(storageService.getSellers());
+    setCurrentSeller(storageService.getCurrentSeller());
+    setIsAdminAuthenticated(storageService.isAdminAuthenticated());
   };
 
   useEffect(() => {
@@ -383,6 +445,134 @@ export const ShopProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     showToast(`Switched view to ${role.toUpperCase()} mode`, 'info');
   };
 
+  // Seller Authentication & Registration
+  const sellerLogin = (email: string, pass: string) => {
+    const res = storageService.authenticateSeller(email, pass);
+    if (res.success && res.seller) {
+      setCurrentSeller(res.seller);
+      showToast(res.message, 'success');
+    } else {
+      showToast(res.message, 'error');
+    }
+    return res;
+  };
+
+  const sellerRegister = (data: {
+    storeName: string;
+    ownerName: string;
+    email: string;
+    password: string;
+    phone: string;
+    location: string;
+    category: string;
+    description?: string;
+    logo?: string;
+    coverImage?: string;
+  }) => {
+    const res = storageService.registerSeller(data);
+    if (res.success && res.seller) {
+      setSellers(storageService.getSellers());
+      setStores(storageService.getStores());
+      setCurrentSeller(res.seller);
+      showToast(`Welcome! Store "${data.storeName}" registered successfully`, 'success');
+    } else {
+      showToast(res.message, 'error');
+    }
+    return res;
+  };
+
+  const sellerLogout = () => {
+    storageService.logoutSeller();
+    setCurrentSeller(null);
+    showToast('Signed out of Merchant Portal', 'info');
+  };
+
+  const addSellerByAdmin = (data: {
+    storeName: string;
+    ownerName: string;
+    email: string;
+    password?: string;
+    phone: string;
+    location: string;
+    category: string;
+    description?: string;
+    logo?: string;
+    coverImage?: string;
+    isVerified?: boolean;
+  }) => {
+    const res = storageService.registerSeller(
+      {
+        ...data,
+        password: data.password || 'seller123',
+      },
+      false // Keep admin in their session, do not auto-login as seller
+    );
+    if (res.success) {
+      setSellers(storageService.getSellers());
+      setStores(storageService.getStores());
+      showToast(`Merchant "${data.storeName}" onboarded successfully`, 'success');
+    } else {
+      showToast(res.message, 'error');
+    }
+    return res;
+  };
+
+  const deleteSellerByAdmin = (sellerId: string) => {
+    const res = storageService.deleteSeller(sellerId);
+    if (res.success) {
+      setSellers(storageService.getSellers());
+      showToast(res.message, 'info');
+    } else {
+      showToast(res.message, 'error');
+    }
+    return res;
+  };
+
+  const deleteStoreByAdmin = (storeId: string) => {
+    const res = storageService.deleteStore(storeId);
+    if (res.success) {
+      setStores(storageService.getStores());
+      showToast(res.message, 'info');
+    } else {
+      showToast(res.message, 'error');
+    }
+    return res;
+  };
+
+  // Admin Authentication & Security
+  const adminLogin = (password: string) => {
+    const valid = storageService.verifyAdminPassword(password);
+    if (valid) {
+      storageService.setAdminAuthenticated(true);
+      setIsAdminAuthenticated(true);
+      showToast('Admin Authority verified. Welcome to GMC Admin CMS', 'success');
+      return { success: true, message: 'Authenticated successfully' };
+    } else {
+      showToast('Incorrect admin password. (Hint: default is admin123)', 'error');
+      return { success: false, message: 'Incorrect admin password' };
+    }
+  };
+
+  const adminLogout = () => {
+    storageService.logoutAdmin();
+    setIsAdminAuthenticated(false);
+    showToast('Admin session locked', 'info');
+  };
+
+  const changeAdminPassword = (oldPass: string, newPass: string) => {
+    if (!storageService.verifyAdminPassword(oldPass)) {
+      showToast('Current password incorrect', 'error');
+      return { success: false, message: 'Current password incorrect' };
+    }
+    if (newPass.length < 4) {
+      showToast('Password must be at least 4 characters', 'error');
+      return { success: false, message: 'Password must be at least 4 characters' };
+    }
+    storageService.setAdminPassword(newPass);
+    showToast('Admin password successfully updated', 'success');
+    return { success: true, message: 'Admin password updated' };
+  };
+
   // Tracking
   const trackOrderById = (orderIdOrNumber: string): boolean => {
     const trimmed = orderIdOrNumber.trim().toUpperCase();
@@ -473,13 +663,30 @@ export const ShopProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   // Management CRUD
   const addProduct = (productData: Omit<Product, 'id'>): Product => {
+    let targetSellerId = productData.sellerId;
+    let targetSellerName = productData.sellerName;
+    let targetSellerVerified = productData.sellerVerified;
+
+    if (currentSeller) {
+      targetSellerId = currentSeller.storeId;
+      targetSellerName = currentSeller.storeName;
+      targetSellerVerified = currentSeller.isVerified;
+    } else if (!isAdminAuthenticated) {
+      showToast('Please sign in to a registered merchant account to list products.', 'error');
+      // Still prevent rogue additions
+      return null as unknown as Product;
+    }
+
     const newProduct: Product = {
       ...productData,
+      sellerId: targetSellerId,
+      sellerName: targetSellerName,
+      sellerVerified: targetSellerVerified ?? true,
       id: `prod-${Date.now()}`,
     };
     storageService.saveProduct(newProduct);
     setProducts(storageService.getProducts());
-    showToast(`Product "${newProduct.name}" listed successfully`, 'success');
+    showToast(`Product "${newProduct.name}" listed under ${targetSellerName}`, 'success');
     return newProduct;
   };
 
@@ -492,21 +699,114 @@ export const ShopProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     } else {
       target = productOrId;
     }
+
+    // Strict Authorization: Registered sellers can ONLY edit their own items
+    if (!isAdminAuthenticated) {
+      if (!currentSeller) {
+        showToast('Please sign in to your merchant account to edit products', 'error');
+        return;
+      }
+      if (target.sellerId !== currentSeller.storeId) {
+        showToast(`Access Denied: You can only edit items belonging to ${currentSeller.storeName}`, 'error');
+        return;
+      }
+    }
+
     storageService.saveProduct(target);
     setProducts(storageService.getProducts());
     showToast(`Product "${target.name}" updated`, 'success');
   };
 
   const deleteProduct = (productId: string) => {
+    const target = products.find((p) => p.id === productId);
+    if (!target) return;
+
+    // Strict Authorization: Registered sellers can ONLY delete their own items
+    if (!isAdminAuthenticated) {
+      if (!currentSeller) {
+        showToast('Please sign in to your merchant account to delete products', 'error');
+        return;
+      }
+      if (target.sellerId !== currentSeller.storeId) {
+        showToast(`Access Denied: You can only delete items belonging to ${currentSeller.storeName}`, 'error');
+        return;
+      }
+    }
+
     storageService.deleteProduct(productId);
     setProducts(storageService.getProducts());
     showToast('Product deleted', 'info');
   };
 
+  const addCategory = (categoryData: {
+    name: string;
+    slug?: string;
+    description?: string;
+    iconName?: string;
+    image?: string;
+    featured?: boolean;
+    order?: number;
+    isActive?: boolean;
+  }): { success: boolean; message: string; category?: Category } => {
+    const trimmedName = categoryData.name.trim();
+    if (!trimmedName) {
+      return { success: false, message: 'Category name is required' };
+    }
+
+    const currentCats = storageService.getCategories();
+    if (currentCats.some((c) => c.name.toLowerCase() === trimmedName.toLowerCase())) {
+      return { success: false, message: `Category "${trimmedName}" already exists` };
+    }
+
+    const slug = (categoryData.slug?.trim() || trimmedName)
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/(^-|-$)/g, '');
+
+    const newCategory: Category = {
+      id: `cat-${slug || Date.now()}`,
+      name: trimmedName,
+      slug: slug || `cat-${Date.now()}`,
+      description: categoryData.description?.trim() || '',
+      iconName: categoryData.iconName || 'Package',
+      image: categoryData.image?.trim() || 'https://images.unsplash.com/photo-1542838132-92c53300491e?w=500&auto=format&fit=crop&q=80',
+      itemCount: 0,
+      featured: categoryData.featured ?? true,
+      order: categoryData.order ?? (currentCats.length + 1),
+      isActive: categoryData.isActive ?? true,
+    };
+
+    storageService.saveCategory(newCategory);
+    setCategories(storageService.getCategories());
+    showToast(`Category "${newCategory.name}" added successfully`, 'success');
+    return { success: true, message: 'Category added successfully', category: newCategory };
+  };
+
   const updateCategory = (category: Category) => {
+    const oldCategories = storageService.getCategories();
+    const oldCat = oldCategories.find((c) => c.id === category.id);
+
     storageService.saveCategory(category);
     setCategories(storageService.getCategories());
-    showToast(`Category "${category.name}" saved`, 'success');
+
+    // If category name changed, synchronize associated products
+    if (oldCat && oldCat.name !== category.name) {
+      const allProducts = storageService.getProducts();
+      let changed = false;
+      allProducts.forEach((p) => {
+        if (p.categoryId === category.id || p.category === oldCat.name) {
+          p.category = category.name;
+          p.categoryId = category.id;
+          changed = true;
+        }
+      });
+      if (changed) {
+        storageService.saveProducts(allProducts);
+        setProducts(allProducts);
+      }
+    }
+
+    showToast(`Category "${category.name}" updated`, 'success');
   };
 
   const deleteCategory = (categoryId: string) => {
@@ -633,10 +933,24 @@ export const ShopProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         trackOrderById,
         userRole: user.role,
         setUserRole,
+        sellers,
+        currentSeller,
+        isSellerLoggedIn,
+        sellerLogin,
+        sellerRegister,
+        sellerLogout,
+        addSellerByAdmin,
+        deleteSellerByAdmin,
+        deleteStoreByAdmin,
+        isAdminAuthenticated,
+        adminLogin,
+        adminLogout,
+        changeAdminPassword,
         refreshData,
         addProduct,
         updateProduct,
         deleteProduct,
+        addCategory,
         updateCategory,
         deleteCategory,
         updateStore,

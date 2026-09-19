@@ -229,3 +229,20 @@ export interface InventoryTransaction {
   referenceNote: string;
   timestamp: string;
 }
+
+export interface SellerAccount {
+  id: string;
+  email: string;
+  password?: string;
+  storeId: string;
+  storeName: string;
+  ownerName: string;
+  phone: string;
+  location: string;
+  category: string;
+  description?: string;
+  logo?: string;
+  coverImage?: string;
+  createdAt: string;
+  isVerified: boolean;
+}

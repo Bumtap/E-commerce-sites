@@ -197,7 +197,7 @@ export const Header: React.FC = () => {
             )}
           </div>
 
-          {/* Right controls: Track Order, Language Dropdown & Role Dropdown */}
+          {/* Right controls: Track Order, Seller Portal, Admin Panel, Language Dropdown & Role Dropdown */}
           <div className="flex items-center gap-2 sm:gap-3 shrink-0">
             {/* Quick Track Order Link */}
             <button
@@ -205,8 +205,40 @@ export const Header: React.FC = () => {
               className="text-slate-300 hover:text-white flex items-center gap-1 transition-colors text-xs cursor-pointer"
             >
               <Package className="w-3.5 h-3.5 text-teal-400" />
-              <span className="hidden sm:inline">Track Order</span>
-              <span className="sm:hidden">Track</span>
+              <span className="hidden lg:inline">Track Order</span>
+              <span className="lg:hidden">Track</span>
+            </button>
+
+            <span className="text-slate-700 hidden sm:inline">|</span>
+
+            {/* Seller Portal Quick Link */}
+            <button
+              onClick={() => {
+                setUserRole('seller');
+                setIsSellerPortalOpen(true);
+              }}
+              className="text-amber-300 hover:text-amber-200 flex items-center gap-1 transition-colors text-xs font-semibold cursor-pointer"
+              title="Seller Portal: Register or login to manage your store"
+            >
+              <Store className="w-3.5 h-3.5 text-amber-400" />
+              <span className="hidden sm:inline">Seller Portal</span>
+              <span className="sm:hidden">Sell</span>
+            </button>
+
+            <span className="text-slate-700 hidden sm:inline">|</span>
+
+            {/* Admin Panel Quick Link */}
+            <button
+              onClick={() => {
+                setUserRole('admin');
+                setIsAdminPortalOpen(true);
+              }}
+              className="text-purple-300 hover:text-purple-200 flex items-center gap-1 transition-colors text-xs font-semibold cursor-pointer"
+              title="Admin Panel: Password protected GMC marketplace control"
+            >
+              <ShieldCheck className="w-3.5 h-3.5 text-purple-400" />
+              <span className="hidden sm:inline">Admin Panel</span>
+              <span className="sm:hidden">Admin</span>
             </button>
 
             <span className="text-slate-700 hidden sm:inline">|</span>

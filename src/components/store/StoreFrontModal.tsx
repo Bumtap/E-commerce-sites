@@ -1,12 +1,14 @@
 import React from 'react';
 import { useShop } from '../../context/ShopContext';
 import { formatNu } from '../../utils/format';
+import { formatWhatsAppUrl } from '../../utils/whatsapp';
 import {
   X,
   Star,
   CheckCircle2,
   MapPin,
   Phone,
+  MessageCircle,
   Mail,
   ShoppingBag,
   Package,
@@ -99,21 +101,27 @@ export const StoreFrontModal: React.FC = () => {
                 </div>
               </div>
 
-              {/* Contact Seller */}
+              {/* Contact Seller via WhatsApp or Call */}
               <div className="flex flex-wrap items-center gap-2 text-xs">
                 <a
+                  href={formatWhatsAppUrl(
+                    activeStore.phone,
+                    `Kuzu Zangpo! Hello ${activeStore.name}, I am visiting your store on GMC Marketplace and would like to inquire about your products.`
+                  )}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-3.5 py-2 rounded-xl flex items-center gap-1.5 transition-all shadow-2xs hover:shadow-sm cursor-pointer"
+                  title="Direct WhatsApp chat with seller"
+                >
+                  <MessageCircle className="w-4 h-4" />
+                  <span>WhatsApp Message</span>
+                </a>
+                <a
                   href={`tel:${activeStore.phone}`}
-                  className="bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 font-bold px-3.5 py-2 rounded-xl flex items-center gap-1.5 transition-colors cursor-pointer"
+                  className="bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 font-bold px-3 py-2 rounded-xl flex items-center gap-1.5 transition-colors cursor-pointer border border-slate-200 dark:border-slate-700"
                 >
                   <Phone className="w-3.5 h-3.5" />
                   <span>Call Store</span>
-                </a>
-                <a
-                  href={`mailto:${activeStore.email}`}
-                  className="bg-teal-700 hover:bg-teal-800 text-white font-bold px-3.5 py-2 rounded-xl flex items-center gap-1.5 transition-colors cursor-pointer"
-                >
-                  <Mail className="w-3.5 h-3.5" />
-                  <span>Message Seller</span>
                 </a>
               </div>
             </div>
