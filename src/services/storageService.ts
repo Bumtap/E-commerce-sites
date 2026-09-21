@@ -174,6 +174,10 @@ class StorageService {
     return this.get<Product[]>(STORAGE_KEYS.PRODUCTS, INITIAL_PRODUCTS);
   }
 
+  setProducts(products: Product[]): void {
+    this.set(STORAGE_KEYS.PRODUCTS, products);
+  }
+
   saveProduct(product: Product): void {
     const products = this.getProducts();
     const index = products.findIndex((p) => p.id === product.id);
@@ -201,6 +205,10 @@ class StorageService {
     return categories;
   }
 
+  setCategories(categories: Category[]): void {
+    this.set(STORAGE_KEYS.CATEGORIES, categories);
+  }
+
   saveCategory(category: Category): void {
     const categories = this.getCategories();
     const index = categories.findIndex((c) => c.id === category.id);
@@ -220,6 +228,10 @@ class StorageService {
   // --- Stores ---
   getStores(): Store[] {
     return this.get<Store[]>(STORAGE_KEYS.STORES, INITIAL_STORES);
+  }
+
+  setStores(stores: Store[]): void {
+    this.set(STORAGE_KEYS.STORES, stores);
   }
 
   saveStore(store: Store): void {
@@ -304,6 +316,10 @@ class StorageService {
         estimatedDelivery: 'Today by 2:00 PM',
       },
     ]);
+  }
+
+  setOrders(orders: Order[]): void {
+    this.set(STORAGE_KEYS.ORDERS, orders);
   }
 
   saveOrder(order: Order): void {
@@ -458,6 +474,10 @@ class StorageService {
   // --- Seller Authentication & Profiles ---
   getSellers(): SellerAccount[] {
     return this.get<SellerAccount[]>(STORAGE_KEYS.SELLERS, DEFAULT_SELLERS);
+  }
+
+  setSellers(sellers: SellerAccount[]): void {
+    this.set(STORAGE_KEYS.SELLERS, sellers);
   }
 
   saveSeller(seller: SellerAccount): void {

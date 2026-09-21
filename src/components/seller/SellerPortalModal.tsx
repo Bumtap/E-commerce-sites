@@ -626,21 +626,34 @@ export const SellerPortalModal: React.FC = () => {
     status: 'approved',
   };
 
-  // Strictly filter products to THIS seller only
-  const sellerProducts = products.filter((p) => p.sellerId === currentSeller.storeId);
+  // Match products belonging to THIS seller (supporting storeId, sellerId, or storeName)
+  const isSellerProduct = (p: Product) =>
+    p.sellerId === currentSeller.storeId ||
+    p.sellerId === currentSeller.id ||
+    (currentSeller.storeName && p.sellerName?.toLowerCase().trim() === currentSeller.storeName.toLowerCase().trim());
+
+  const sellerProducts = products.filter(isSellerProduct);
 
   // Orders that contain items from this seller
   const sellerOrders = orders.filter((o) =>
-    o.items.some((item) => item.sellerId === currentSeller.storeId)
+    o.items.some((item) =>
+      item.sellerId === currentSeller.storeId ||
+      item.sellerId === currentSeller.id ||
+      (currentSeller.storeName && item.sellerName?.toLowerCase().trim() === currentSeller.storeName.toLowerCase().trim())
+    )
   );
 
   const totalSellerSales = sellerOrders.reduce((sum, ord) => {
-    const sellerItems = ord.items.filter((item) => item.sellerId === currentSeller.storeId);
+    const sellerItems = ord.items.filter((item) =>
+      item.sellerId === currentSeller.storeId ||
+      item.sellerId === currentSeller.id ||
+      (currentSeller.storeName && item.sellerName?.toLowerCase().trim() === currentSeller.storeName.toLowerCase().trim())
+    );
     return sum + sellerItems.reduce((s, i) => s + i.subtotal, 0);
   }, 0);
 
   const startEditingProduct = (p: Product) => {
-    if (p.sellerId !== currentSeller.storeId) {
+    if (!isSellerProduct(p)) {
       showToast('Unauthorized: You can only edit products from your own store', 'error');
       return;
     }

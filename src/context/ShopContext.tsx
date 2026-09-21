@@ -17,6 +17,7 @@ import {
   SellerAccount
 } from '../types';
 import { storageService, DEFAULT_USER } from '../services/storageService';
+import { supabaseService } from '../services/supabaseService';
 
 interface ToastInfo {
   id: string;
@@ -293,6 +294,85 @@ export const ShopProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   useEffect(() => {
     refreshData();
+
+    // 1. Initialize & Seed Supabase tables if not yet populated
+    supabaseService.initializeAndSeed();
+
+    // 2. Immediate active fetch for fast cloud hydration across all browsers and Netlify visitors
+    const syncFromCloud = async () => {
+      try {
+        const [cloudProducts, cloudStores, cloudSellers, cloudCategories] = await Promise.all([
+          supabaseService.fetchProducts(),
+          supabaseService.fetchStores(),
+          supabaseService.fetchSellers(),
+          supabaseService.fetchCategories(),
+        ]);
+
+        if (cloudProducts.length > 0) {
+          setProducts(cloudProducts);
+          storageService.setProducts(cloudProducts);
+        }
+        if (cloudStores.length > 0) {
+          setStores(cloudStores);
+          storageService.setStores(cloudStores);
+        }
+        if (cloudSellers.length > 0) {
+          setSellers(cloudSellers);
+          storageService.setSellers(cloudSellers);
+        }
+        if (cloudCategories.length > 0) {
+          setCategories(cloudCategories);
+          storageService.setCategories(cloudCategories);
+        }
+      } catch (e) {
+        console.warn('Initial cloud hydration note:', e);
+      }
+    };
+    syncFromCloud();
+
+    // 3. Real-time subscriptions for all public visitors across devices
+    const unsubProducts = supabaseService.subscribeProducts((cloudProducts) => {
+      if (cloudProducts && cloudProducts.length > 0) {
+        setProducts(cloudProducts);
+        storageService.setProducts(cloudProducts);
+      }
+    });
+
+    const unsubStores = supabaseService.subscribeStores((cloudStores) => {
+      if (cloudStores && cloudStores.length > 0) {
+        setStores(cloudStores);
+        storageService.setStores(cloudStores);
+      }
+    });
+
+    const unsubCategories = supabaseService.subscribeCategories((cloudCategories) => {
+      if (cloudCategories && cloudCategories.length > 0) {
+        setCategories(cloudCategories);
+        storageService.setCategories(cloudCategories);
+      }
+    });
+
+    const unsubSellers = supabaseService.subscribeSellers((cloudSellers) => {
+      if (cloudSellers && cloudSellers.length > 0) {
+        setSellers(cloudSellers);
+        storageService.setSellers(cloudSellers);
+      }
+    });
+
+    const unsubOrders = supabaseService.subscribeOrders((cloudOrders) => {
+      if (cloudOrders && cloudOrders.length > 0) {
+        setOrders(cloudOrders);
+        storageService.setOrders(cloudOrders);
+      }
+    });
+
+    return () => {
+      unsubProducts();
+      unsubStores();
+      unsubCategories();
+      unsubSellers();
+      unsubOrders();
+    };
   }, []);
 
   // Save cart changes
@@ -470,7 +550,9 @@ export const ShopProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     coverImage?: string;
   }) => {
     const res = storageService.registerSeller(data);
-    if (res.success && res.seller) {
+    if (res.success && res.seller && res.store) {
+      supabaseService.saveStore(res.store);
+      supabaseService.saveSeller(res.seller);
       setSellers(storageService.getSellers());
       setStores(storageService.getStores());
       setCurrentSeller(res.seller);
@@ -507,7 +589,9 @@ export const ShopProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       },
       false // Keep admin in their session, do not auto-login as seller
     );
-    if (res.success) {
+    if (res.success && res.seller && res.store) {
+      supabaseService.saveStore(res.store);
+      supabaseService.saveSeller(res.seller);
       setSellers(storageService.getSellers());
       setStores(storageService.getStores());
       showToast(`Merchant "${data.storeName}" onboarded successfully`, 'success');
@@ -518,6 +602,15 @@ export const ShopProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   };
 
   const deleteSellerByAdmin = (sellerId: string) => {
+    if (!isAdminAuthenticated) {
+      showToast('Access Restricted: Only administrators have rights to delete sellers.', 'error');
+      return { success: false, message: 'Administrator authentication required.' };
+    }
+    const seller = sellers.find((s) => s.id === sellerId);
+    if (seller?.storeId) {
+      supabaseService.deleteStore(seller.storeId);
+    }
+    supabaseService.deleteSeller(sellerId);
     const res = storageService.deleteSeller(sellerId);
     if (res.success) {
       setSellers(storageService.getSellers());
@@ -529,6 +622,11 @@ export const ShopProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   };
 
   const deleteStoreByAdmin = (storeId: string) => {
+    if (!isAdminAuthenticated) {
+      showToast('Access Restricted: Only administrators have rights to delete stores.', 'error');
+      return { success: false, message: 'Administrator authentication required.' };
+    }
+    supabaseService.deleteStore(storeId);
     const res = storageService.deleteStore(storeId);
     if (res.success) {
       setStores(storageService.getStores());
@@ -608,8 +706,9 @@ export const ShopProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       ],
     };
 
-    // Save to storage
+    // Save to storage and Supabase
     storageService.saveOrder(newOrder);
+    supabaseService.saveOrder(newOrder);
 
     // Reduce stock and log transaction
     newOrder.items.forEach((item) => {
@@ -619,6 +718,7 @@ export const ShopProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         const nextStock = Math.max(0, prevStock - item.quantity);
         const updated = { ...prod, stock: nextStock };
         storageService.saveProduct(updated);
+        supabaseService.saveProduct(updated);
         storageService.logInventoryTransaction({
           productId: prod.id,
           productName: prod.name,
@@ -653,6 +753,7 @@ export const ShopProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const updateOrderStatus = (orderId: string, status: Order['status'], note?: string) => {
     const updated = storageService.updateOrderStatus(orderId, status, note);
     if (updated) {
+      supabaseService.saveOrder(updated);
       setOrders(storageService.getOrders());
       if (trackingOrder?.id === orderId) {
         setTrackingOrder(updated);
@@ -661,7 +762,7 @@ export const ShopProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }
   };
 
-  // Management CRUD
+  // Management CRUD - Restricted rights: only authenticated merchants and admins can add or edit
   const addProduct = (productData: Omit<Product, 'id'>): Product => {
     let targetSellerId = productData.sellerId;
     let targetSellerName = productData.sellerName;
@@ -672,8 +773,7 @@ export const ShopProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       targetSellerName = currentSeller.storeName;
       targetSellerVerified = currentSeller.isVerified;
     } else if (!isAdminAuthenticated) {
-      showToast('Please sign in to a registered merchant account to list products.', 'error');
-      // Still prevent rogue additions
+      showToast('Access Restricted: Customers cannot add products. Only registered merchants and administrators have rights to list products.', 'error');
       return null as unknown as Product;
     }
 
@@ -685,6 +785,7 @@ export const ShopProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       id: `prod-${Date.now()}`,
     };
     storageService.saveProduct(newProduct);
+    supabaseService.saveProduct(newProduct);
     setProducts(storageService.getProducts());
     showToast(`Product "${newProduct.name}" listed under ${targetSellerName}`, 'success');
     return newProduct;
@@ -700,10 +801,10 @@ export const ShopProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       target = productOrId;
     }
 
-    // Strict Authorization: Registered sellers can ONLY edit their own items
+    // Strict Authorization: Customers cannot edit. Only admins or the owning merchant can edit.
     if (!isAdminAuthenticated) {
       if (!currentSeller) {
-        showToast('Please sign in to your merchant account to edit products', 'error');
+        showToast('Access Restricted: Customers cannot edit products. Only registered merchants can edit their listings.', 'error');
         return;
       }
       if (target.sellerId !== currentSeller.storeId) {
@@ -713,6 +814,7 @@ export const ShopProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }
 
     storageService.saveProduct(target);
+    supabaseService.saveProduct(target);
     setProducts(storageService.getProducts());
     showToast(`Product "${target.name}" updated`, 'success');
   };
@@ -721,10 +823,10 @@ export const ShopProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     const target = products.find((p) => p.id === productId);
     if (!target) return;
 
-    // Strict Authorization: Registered sellers can ONLY delete their own items
+    // Strict Authorization: Customers cannot delete. Only admins or owning merchant can delete.
     if (!isAdminAuthenticated) {
       if (!currentSeller) {
-        showToast('Please sign in to your merchant account to delete products', 'error');
+        showToast('Access Restricted: Customers cannot delete products.', 'error');
         return;
       }
       if (target.sellerId !== currentSeller.storeId) {
@@ -734,6 +836,7 @@ export const ShopProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }
 
     storageService.deleteProduct(productId);
+    supabaseService.deleteProduct(productId);
     setProducts(storageService.getProducts());
     showToast('Product deleted', 'info');
   };
@@ -748,6 +851,11 @@ export const ShopProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     order?: number;
     isActive?: boolean;
   }): { success: boolean; message: string; category?: Category } => {
+    if (!isAdminAuthenticated) {
+      showToast('Access Restricted: Only administrators have rights to add categories.', 'error');
+      return { success: false, message: 'Administrator rights required' };
+    }
+
     const trimmedName = categoryData.name.trim();
     if (!trimmedName) {
       return { success: false, message: 'Category name is required' };
@@ -777,16 +885,23 @@ export const ShopProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     };
 
     storageService.saveCategory(newCategory);
+    supabaseService.saveCategory(newCategory);
     setCategories(storageService.getCategories());
     showToast(`Category "${newCategory.name}" added successfully`, 'success');
     return { success: true, message: 'Category added successfully', category: newCategory };
   };
 
   const updateCategory = (category: Category) => {
+    if (!isAdminAuthenticated) {
+      showToast('Access Restricted: Only administrators have rights to edit categories.', 'error');
+      return;
+    }
+
     const oldCategories = storageService.getCategories();
     const oldCat = oldCategories.find((c) => c.id === category.id);
 
     storageService.saveCategory(category);
+    supabaseService.saveCategory(category);
     setCategories(storageService.getCategories());
 
     // If category name changed, synchronize associated products
@@ -798,10 +913,11 @@ export const ShopProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           p.category = category.name;
           p.categoryId = category.id;
           changed = true;
+          supabaseService.saveProduct(p);
         }
       });
       if (changed) {
-        storageService.saveProducts(allProducts);
+        storageService.setProducts(allProducts);
         setProducts(allProducts);
       }
     }
@@ -810,7 +926,13 @@ export const ShopProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   };
 
   const deleteCategory = (categoryId: string) => {
+    if (!isAdminAuthenticated) {
+      showToast('Access Restricted: Only administrators have rights to delete categories.', 'error');
+      return;
+    }
+
     storageService.deleteCategory(categoryId);
+    supabaseService.deleteCategory(categoryId);
     setCategories(storageService.getCategories());
     showToast('Category deleted', 'info');
   };
@@ -824,7 +946,17 @@ export const ShopProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     } else {
       target = storeOrId;
     }
+
+    // Strict Authorization: Customers cannot edit stores. Only admins or owning merchant can edit.
+    if (!isAdminAuthenticated) {
+      if (!currentSeller || currentSeller.storeId !== target.id) {
+        showToast('Access Restricted: Only authenticated merchants and administrators have rights to edit store settings.', 'error');
+        return;
+      }
+    }
+
     storageService.saveStore(target);
+    supabaseService.saveStore(target);
     setStores(storageService.getStores());
     showToast(`Store "${target.name}" updated`, 'success');
   };

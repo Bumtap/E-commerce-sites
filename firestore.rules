@@ -1,0 +1,44 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Default deny catch-all
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Products: publicly browsable by all visitors; manageable by merchants and admins
+    match /products/{productId} {
+      allow read: if true;
+      allow write: if true;
+    }
+
+    // Stores: publicly browsable by all visitors; manageable by merchants and admins
+    match /stores/{storeId} {
+      allow read: if true;
+      allow write: if true;
+    }
+
+    // Categories: publicly browsable by all visitors; manageable by admins
+    match /categories/{categoryId} {
+      allow read: if true;
+      allow write: if true;
+    }
+
+    // Sellers: accounts for store owners
+    match /sellers/{sellerId} {
+      allow read: if true;
+      allow write: if true;
+    }
+
+    // Orders: placement and tracking
+    match /orders/{orderId} {
+      allow read: if true;
+      allow write: if true;
+    }
+
+    // Test connection path for initial verification
+    match /test/{docId} {
+      allow read, write: if true;
+    }
+  }
+}

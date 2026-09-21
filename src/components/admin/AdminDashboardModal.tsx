@@ -834,29 +834,113 @@ export const AdminDashboardModal: React.FC = () => {
           {/* 4. CATEGORIES TAB */}
           {activeTab === 'categories' && (
             <div className="space-y-4">
-              <div>
-                <h4 className="font-bold text-sm text-slate-900 dark:text-white">Marketplace Categories</h4>
-                <p className="text-xs text-slate-500 dark:text-slate-400">
-                  Organize store navigation and circular category chips.
-                </p>
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-2 border-b border-slate-200 dark:border-slate-800">
+                <div>
+                  <h4 className="font-bold text-sm text-slate-900 dark:text-white">Marketplace Categories</h4>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">
+                    Organize store navigation, icons, and circular category filters.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleOpenAddCategory}
+                  className="px-3.5 py-2 rounded-xl bg-teal-800 hover:bg-teal-900 text-white font-bold text-xs flex items-center gap-1.5 cursor-pointer shadow-xs transition-all self-start sm:self-auto"
+                >
+                  <FolderPlus className="w-4 h-4" />
+                  <span>Add New Category</span>
+                </button>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5">
                 {categories.map((c) => (
                   <div
                     key={c.id}
-                    className="p-3.5 rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-850 flex items-center gap-3"
+                    className={`p-4 rounded-2xl border transition-all ${
+                      c.isActive !== false
+                        ? 'border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-850 shadow-xs'
+                        : 'border-slate-200/60 dark:border-slate-800/60 bg-slate-50/50 dark:bg-slate-900/40 opacity-75'
+                    } flex flex-col justify-between gap-3`}
                   >
-                    <img
-                      src={c.image}
-                      alt={c.name}
-                      className="w-12 h-12 rounded-full object-cover border border-slate-200 dark:border-slate-700 shrink-0"
-                    />
-                    <div className="min-w-0">
-                      <p className="font-bold text-xs text-slate-900 dark:text-white truncate">{c.name}</p>
-                      <p className="text-[11px] text-slate-400 dark:text-slate-500">
-                        {c.itemCount} products • Slug: {c.slug}
-                      </p>
+                    <div className="flex items-start gap-3 min-w-0">
+                      <div className="relative shrink-0">
+                        <img
+                          src={c.image}
+                          alt={c.name}
+                          className="w-12 h-12 rounded-2xl object-cover border border-slate-200 dark:border-slate-700"
+                        />
+                        <div className="absolute -bottom-1 -right-1 p-1 rounded-lg bg-teal-800 text-white shadow-xs">
+                          {renderCategoryIcon(c.iconName || 'Package', 'w-3 h-3')}
+                        </div>
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <h5 className="font-bold text-sm text-slate-900 dark:text-white truncate">{c.name}</h5>
+                          {c.featured && (
+                            <span className="text-[10px] bg-amber-50 dark:bg-amber-950/50 text-amber-700 dark:text-amber-400 px-1.5 py-0.5 rounded font-bold border border-amber-200 dark:border-amber-800/50">
+                              Featured
+                            </span>
+                          )}
+                          {c.isActive === false && (
+                            <span className="text-[10px] bg-rose-50 dark:bg-rose-950/50 text-rose-600 dark:text-rose-400 px-1.5 py-0.5 rounded font-bold">
+                              Hidden
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5 font-mono">
+                          /{c.slug}
+                        </p>
+                        <p className="text-xs text-slate-600 dark:text-slate-300 mt-1 line-clamp-1">
+                          {c.description || `${c.itemCount || 0} products registered`}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center justify-between pt-2 border-t border-slate-100 dark:border-slate-800/80 text-xs">
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => handleQuickToggleCategoryFeatured(c)}
+                          className={`px-2 py-1 rounded-lg text-[11px] font-bold border cursor-pointer transition-colors ${
+                            c.featured
+                              ? 'bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-800/50'
+                              : 'text-slate-500 dark:text-slate-400 border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800'
+                          }`}
+                          title="Toggle featured home display"
+                        >
+                          <Star className="w-3 h-3 inline mr-1 fill-current" />
+                          <span>{c.featured ? 'Featured' : 'Regular'}</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleQuickToggleCategoryActive(c)}
+                          className={`px-2 py-1 rounded-lg text-[11px] font-bold border cursor-pointer transition-colors ${
+                            c.isActive !== false
+                              ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800/50'
+                              : 'bg-slate-100 dark:bg-slate-800 text-slate-500 border-slate-200 dark:border-slate-700'
+                          }`}
+                        >
+                          {c.isActive !== false ? 'Active' : 'Hidden'}
+                        </button>
+                      </div>
+
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => handleOpenEditCategory(c)}
+                          className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 hover:bg-teal-50 dark:hover:bg-teal-950/50 text-slate-700 dark:text-slate-300 hover:text-teal-700 transition-colors cursor-pointer"
+                          title="Edit Category Details"
+                        >
+                          <Edit2 className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setCategoryToDelete(c)}
+                          className="p-1.5 rounded-lg border border-red-200 dark:border-red-900/50 hover:bg-red-50 dark:hover:bg-red-950/40 text-red-600 dark:text-red-400 transition-colors cursor-pointer"
+                          title="Delete Category"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
                     </div>
                   </div>
                 ))}
@@ -1285,6 +1369,250 @@ export const AdminDashboardModal: React.FC = () => {
                   </button>
                 </div>
               </form>
+            </div>
+          </div>
+        )}
+
+        {/* ADD / EDIT CATEGORY MODAL */}
+        {showCategoryModal && (
+          <div className="fixed inset-0 z-60 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto">
+            <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl max-w-xl w-full p-6 shadow-2xl space-y-4 my-8 animate-in fade-in zoom-in-95 duration-150">
+              <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
+                <div className="flex items-center gap-2">
+                  <div className="p-2 rounded-xl bg-teal-50 dark:bg-teal-950/50 text-teal-800 dark:text-teal-300">
+                    <FolderPlus className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h3 className="font-bold text-base text-slate-900 dark:text-white">
+                      {editingCategory ? 'Edit Category' : 'Add New Category'}
+                    </h3>
+                    <p className="text-xs text-slate-500 dark:text-slate-400">
+                      Configure marketplace navigation name, slug, icon, and display banner.
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowCategoryModal(false)}
+                  className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              {categoryFormError && (
+                <div className="p-3 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900/50 text-rose-700 dark:text-rose-300 text-xs font-semibold flex items-center gap-2">
+                  <AlertTriangle className="w-4 h-4 shrink-0" />
+                  <span>{categoryFormError}</span>
+                </div>
+              )}
+
+              <form onSubmit={handleSaveCategorySubmit} className="space-y-4 text-xs">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                  <div>
+                    <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">
+                      Category Name <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      placeholder="e.g. Bhutanese Red Rice"
+                      value={categoryFormData.name}
+                      onChange={(e) => handleCategoryNameChange(e.target.value)}
+                      className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white font-medium focus:ring-2 focus:ring-teal-700 outline-hidden"
+                    />
+                  </div>
+                  <div>
+                    <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">
+                      URL Slug <span className="text-slate-400">(Auto-generated)</span>
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="e.g. red-rice"
+                      value={categoryFormData.slug}
+                      onChange={(e) => setCategoryFormData({ ...categoryFormData, slug: e.target.value })}
+                      className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white font-mono text-xs focus:ring-2 focus:ring-teal-700 outline-hidden"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">
+                    Short Description
+                  </label>
+                  <textarea
+                    rows={2}
+                    placeholder="Brief description of items in this category..."
+                    value={categoryFormData.description}
+                    onChange={(e) => setCategoryFormData({ ...categoryFormData, description: e.target.value })}
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white font-medium focus:ring-2 focus:ring-teal-700 outline-hidden resize-none"
+                  />
+                </div>
+
+                {/* Icon Selection */}
+                <div>
+                  <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1.5">
+                    Category Icon
+                  </label>
+                  <div className="grid grid-cols-4 sm:grid-cols-6 gap-2">
+                    {CATEGORY_ICON_OPTIONS.map((opt) => {
+                      const isSelected = categoryFormData.iconName === opt.id;
+                      return (
+                        <button
+                          key={opt.id}
+                          type="button"
+                          onClick={() => setCategoryFormData({ ...categoryFormData, iconName: opt.id })}
+                          className={`p-2 rounded-xl border flex flex-col items-center gap-1 cursor-pointer transition-all ${
+                            isSelected
+                              ? 'border-teal-700 bg-teal-50 dark:bg-teal-950/60 text-teal-800 dark:text-teal-300 ring-2 ring-teal-700/20 shadow-xs'
+                              : 'border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-400'
+                          }`}
+                        >
+                          {renderCategoryIcon(opt.id, 'w-4 h-4')}
+                          <span className="text-[10px] font-semibold truncate w-full text-center">{opt.label}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Image Upload & Presets */}
+                <div className="space-y-2">
+                  <ImageUpload
+                    id="admin-category-image"
+                    label="Category Banner / Thumbnail Image"
+                    sublabel="Upload custom image or pick curated preset below"
+                    value={categoryFormData.image}
+                    onChange={(url) => setCategoryFormData({ ...categoryFormData, image: url })}
+                    variant="cover"
+                  />
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-500 dark:text-slate-400 mb-1">
+                      Or pick from curated Bhutanese imagery presets:
+                    </label>
+                    <div className="flex items-center gap-2 overflow-x-auto pb-1.5 scrollbar-thin">
+                      {CATEGORY_IMAGE_PRESETS.map((preset) => {
+                        const isChosen = categoryFormData.image === preset.url;
+                        return (
+                          <button
+                            key={preset.name}
+                            type="button"
+                            onClick={() => setCategoryFormData({ ...categoryFormData, image: preset.url })}
+                            className={`shrink-0 flex items-center gap-1.5 p-1.5 pr-2.5 rounded-xl border transition-all cursor-pointer ${
+                              isChosen
+                                ? 'border-teal-700 bg-teal-50 dark:bg-teal-950/60 text-teal-900 dark:text-teal-200 ring-1 ring-teal-700'
+                                : 'border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300'
+                            }`}
+                          >
+                            <img
+                              src={preset.url}
+                              alt={preset.name}
+                              className="w-7 h-7 rounded-lg object-cover"
+                            />
+                            <span className="text-[11px] font-bold whitespace-nowrap">{preset.name}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Order & Settings */}
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1">
+                  <div>
+                    <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">
+                      Display Sort Order
+                    </label>
+                    <input
+                      type="number"
+                      min={1}
+                      value={categoryFormData.order}
+                      onChange={(e) => setCategoryFormData({ ...categoryFormData, order: Number(e.target.value) || 1 })}
+                      className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white font-medium focus:ring-2 focus:ring-teal-700 outline-hidden"
+                    />
+                  </div>
+                  <div className="flex items-center gap-2 sm:pt-6">
+                    <input
+                      type="checkbox"
+                      id="catFeaturedCheck"
+                      checked={categoryFormData.featured}
+                      onChange={(e) => setCategoryFormData({ ...categoryFormData, featured: e.target.checked })}
+                      className="w-4 h-4 rounded text-teal-700 focus:ring-teal-600 cursor-pointer"
+                    />
+                    <label htmlFor="catFeaturedCheck" className="text-xs font-semibold text-slate-700 dark:text-slate-300 cursor-pointer">
+                      Featured on Homepage
+                    </label>
+                  </div>
+                  <div className="flex items-center gap-2 sm:pt-6">
+                    <input
+                      type="checkbox"
+                      id="catActiveCheck"
+                      checked={categoryFormData.isActive}
+                      onChange={(e) => setCategoryFormData({ ...categoryFormData, isActive: e.target.checked })}
+                      className="w-4 h-4 rounded text-teal-700 focus:ring-teal-600 cursor-pointer"
+                    />
+                    <label htmlFor="catActiveCheck" className="text-xs font-semibold text-slate-700 dark:text-slate-300 cursor-pointer">
+                      Active / Visible
+                    </label>
+                  </div>
+                </div>
+
+                <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-end gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setShowCategoryModal(false)}
+                    className="px-4 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 font-bold hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    className="px-5 py-2 rounded-xl bg-teal-800 hover:bg-teal-900 text-white font-bold shadow-xs cursor-pointer transition-all flex items-center gap-1.5"
+                  >
+                    <Check className="w-4 h-4" />
+                    <span>{editingCategory ? 'Save Changes' : 'Create Category'}</span>
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
+
+        {/* DELETE CATEGORY CONFIRMATION MODAL */}
+        {categoryToDelete && (
+          <div className="fixed inset-0 z-70 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+            <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl max-w-sm w-full p-5 shadow-2xl space-y-4 animate-in fade-in zoom-in-95 duration-150">
+              <div className="flex items-center gap-3">
+                <div className="p-2.5 rounded-2xl bg-red-100 dark:bg-red-950/60 text-red-600 shrink-0">
+                  <AlertTriangle className="w-5 h-5" />
+                </div>
+                <div>
+                  <h4 className="font-bold text-sm text-slate-900 dark:text-white">Delete Category?</h4>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">
+                    Are you sure you want to remove &quot;{categoryToDelete.name}&quot;?
+                  </p>
+                </div>
+              </div>
+              <p className="text-xs text-slate-600 dark:text-slate-300 bg-slate-50 dark:bg-slate-800/60 p-3 rounded-xl border border-slate-200/60 dark:border-slate-700/60">
+                Products currently assigned to this category will remain available, but will no longer be filterable by this category name.
+              </p>
+              <div className="flex items-center justify-end gap-2 pt-1">
+                <button
+                  type="button"
+                  onClick={() => setCategoryToDelete(null)}
+                  className="px-4 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 font-bold text-xs hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleConfirmDeleteCategory}
+                  className="px-4 py-2 rounded-xl bg-red-600 hover:bg-red-700 text-white font-bold text-xs shadow-xs transition-colors cursor-pointer flex items-center gap-1"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  <span>Delete Category</span>
+                </button>
+              </div>
             </div>
           </div>
         )}

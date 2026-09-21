@@ -27,8 +27,15 @@ export const StoreFrontModal: React.FC = () => {
 
   if (!activeStore) return null;
 
-  // Products belonging to this store
-  const storeProducts = products.filter((p) => p.sellerId === activeStore.id);
+  // Products belonging to this store - match by storeId, sellerId, or name
+  const storeProducts = products.filter(
+    (p) =>
+      p.sellerId === activeStore.id ||
+      (activeStore.id && p.sellerId === activeStore.id.replace('store-', 'seller-')) ||
+      (activeStore.id && p.sellerId === activeStore.id.replace('seller-', 'store-')) ||
+      (activeStore.slug && p.sellerId?.includes(activeStore.slug)) ||
+      (p.sellerName && activeStore.name && p.sellerName.toLowerCase().trim() === activeStore.name.toLowerCase().trim())
+  );
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-slate-950/75 backdrop-blur-xs overflow-y-auto animate-fadeIn">

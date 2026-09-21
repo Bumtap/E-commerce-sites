@@ -1,0 +1,143 @@
+{
+  "entities": {
+    "Product": {
+      "title": "Product",
+      "description": "Marketplace product item catalog",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Unique product identifier" },
+        "storeId": { "type": "string", "description": "Merchant store ID" },
+        "name": { "type": "string", "description": "Product display name" },
+        "slug": { "type": "string", "description": "URL slug" },
+        "description": { "type": "string", "description": "Full product description" },
+        "price": { "type": "number", "description": "Current selling price in Nu." },
+        "salePrice": { "type": "number", "description": "Discounted price if on sale" },
+        "originalPrice": { "type": "number", "description": "Regular reference price" },
+        "images": { "type": "array", "description": "List of product image URLs" },
+        "category": { "type": "string", "description": "Category name or label" },
+        "categoryId": { "type": "string", "description": "Category document identifier" },
+        "tags": { "type": "array", "description": "Search and badge tags" },
+        "rating": { "type": "number", "description": "Average review rating" },
+        "reviewCount": { "type": "number", "description": "Total reviews count" },
+        "stock": { "type": "number", "description": "Available inventory quantity" },
+        "isOrganic": { "type": "boolean", "description": "Whether certified organic" },
+        "isMadeInBhutan": { "type": "boolean", "description": "Official Made in Bhutan credential" },
+        "isFeatured": { "type": "boolean", "description": "Featured on homepage showcase" },
+        "unit": { "type": "string", "description": "Unit of measurement (kg, piece, bottle, etc.)" },
+        "isActive": { "type": "boolean", "description": "Published and visible in storefront" },
+        "createdAt": { "type": "string", "description": "Timestamp when product was added" },
+        "dzongkhag": { "type": "string", "description": "Origin dzongkhag or region" },
+        "originGMC": { "type": "boolean", "description": "Locally produced in GMC Gelephu" },
+        "storeName": { "type": "string", "description": "Name of the merchant store" }
+      },
+      "required": ["id", "storeId", "name", "price", "stock", "isActive"]
+    },
+    "Store": {
+      "title": "Store",
+      "description": "Registered merchant storefront",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Unique store identifier" },
+        "name": { "type": "string", "description": "Storefront brand name" },
+        "slug": { "type": "string", "description": "Storefront URL slug" },
+        "ownerName": { "type": "string", "description": "Store owner or representative" },
+        "email": { "type": "string", "description": "Contact and login email" },
+        "phone": { "type": "string", "description": "Bhutanese phone/WhatsApp contact" },
+        "location": { "type": "string", "description": "GMC sector or town location" },
+        "address": { "type": "string", "description": "Full physical address" },
+        "category": { "type": "string", "description": "Primary store category" },
+        "description": { "type": "string", "description": "About the store" },
+        "logo": { "type": "string", "description": "Store logo image URL" },
+        "coverImage": { "type": "string", "description": "Storefront banner header" },
+        "isVerified": { "type": "boolean", "description": "Verified GMC merchant badge" },
+        "rating": { "type": "number", "description": "Store rating" },
+        "reviewCount": { "type": "number", "description": "Store reviews count" },
+        "status": { "type": "string", "description": "Approval status (approved, pending, rejected)" },
+        "dzongkhag": { "type": "string", "description": "Region / Dzongkhag" },
+        "joinedDate": { "type": "string", "description": "Date store joined the marketplace" },
+        "productCount": { "type": "number", "description": "Number of listed products" }
+      },
+      "required": ["id", "name", "ownerName", "email", "status"]
+    },
+    "Category": {
+      "title": "Category",
+      "description": "Marketplace shopping department",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Unique category identifier" },
+        "name": { "type": "string", "description": "Display name" },
+        "slug": { "type": "string", "description": "URL slug" },
+        "description": { "type": "string", "description": "Department description" },
+        "iconName": { "type": "string", "description": "Icon identifier" },
+        "image": { "type": "string", "description": "Circular thumbnail image" },
+        "itemCount": { "type": "number", "description": "Item count" },
+        "featured": { "type": "boolean", "description": "Featured in circular chips" },
+        "order": { "type": "number", "description": "Display sort order" },
+        "isActive": { "type": "boolean", "description": "Active in navigation" }
+      },
+      "required": ["id", "name", "slug", "isActive"]
+    },
+    "Seller": {
+      "title": "Seller",
+      "description": "Registered merchant credentials and profile",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Unique seller ID" },
+        "storeId": { "type": "string", "description": "Associated store ID" },
+        "storeName": { "type": "string", "description": "Name of the store" },
+        "ownerName": { "type": "string", "description": "Merchant contact name" },
+        "email": { "type": "string", "description": "Merchant email" },
+        "phone": { "type": "string", "description": "Merchant phone" },
+        "location": { "type": "string", "description": "Merchant location" },
+        "category": { "type": "string", "description": "Store category" },
+        "role": { "type": "string", "description": "User role: seller" },
+        "joinedAt": { "type": "string", "description": "Date registered" },
+        "isVerified": { "type": "boolean", "description": "Verified status" }
+      },
+      "required": ["id", "storeId", "email", "ownerName"]
+    },
+    "Order": {
+      "title": "Order",
+      "description": "Customer purchase transaction",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Unique order identifier" },
+        "orderNumber": { "type": "string", "description": "Human-readable order tracking number" },
+        "customer": { "type": "object", "description": "Customer contact and delivery details" },
+        "items": { "type": "array", "description": "Purchased items with quantity and price" },
+        "subtotal": { "type": "number", "description": "Subtotal amount in Nu." },
+        "deliveryFee": { "type": "number", "description": "Delivery fee in Nu." },
+        "discount": { "type": "number", "description": "Applied discount in Nu." },
+        "tax": { "type": "number", "description": "Tax in Nu." },
+        "totalAmount": { "type": "number", "description": "Grand total in Nu." },
+        "status": { "type": "string", "description": "Order status (pending, confirmed, out_for_delivery, delivered, cancelled)" },
+        "paymentMethod": { "type": "string", "description": "Payment method (mbob, cash_on_delivery, etc.)" },
+        "paymentStatus": { "type": "string", "description": "Payment status" },
+        "createdAt": { "type": "string", "description": "Order timestamp" }
+      },
+      "required": ["id", "orderNumber", "totalAmount", "status"]
+    }
+  },
+  "firestore": {
+    "/products/{productId}": {
+      "schema": "Product",
+      "description": "Marketplace products visible to all public visitors and managed by merchants/admins"
+    },
+    "/stores/{storeId}": {
+      "schema": "Store",
+      "description": "Verified merchant storefronts in Gelephu Mindfulness City"
+    },
+    "/categories/{categoryId}": {
+      "schema": "Category",
+      "description": "Marketplace shopping categories"
+    },
+    "/sellers/{sellerId}": {
+      "schema": "Seller",
+      "description": "Registered merchant accounts"
+    },
+    "/orders/{orderId}": {
+      "schema": "Order",
+      "description": "Customer purchase orders and fulfillment tracking"
+    }
+  }
+}
