@@ -70,6 +70,7 @@ export const SellerPortalModal: React.FC = () => {
     sellerRegister,
     sellerLogout,
     addSellerByAdmin,
+    setActiveStore,
   } = useShop();
 
   const [activeTab, setActiveTab] = useState<'kpi' | 'products' | 'orders' | 'settings' | 'addSeller'>('kpi');
@@ -785,6 +786,18 @@ export const SellerPortalModal: React.FC = () => {
           </div>
 
           <div className="flex items-center gap-2">
+            <button
+              onClick={() => {
+                setActiveStore(currentStore);
+                setIsSellerPortalOpen(false);
+              }}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-teal-600 bg-teal-600 hover:bg-teal-700 text-white text-xs font-bold transition-all cursor-pointer shadow-2xs"
+              title="View your public storefront as customers see it"
+            >
+              <Eye className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">View Public Storefront</span>
+            </button>
+
             <button
               onClick={() => setActiveTab('addSeller')}
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-teal-200 dark:border-teal-800 bg-teal-50 dark:bg-teal-950/60 hover:bg-teal-100 dark:hover:bg-teal-900/50 text-teal-800 dark:text-teal-200 text-xs font-bold transition-all cursor-pointer shadow-2xs"

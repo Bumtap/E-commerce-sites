@@ -27,13 +27,14 @@ export const StoreFrontModal: React.FC = () => {
 
   if (!activeStore) return null;
 
-  // Products belonging to this store - match by storeId, sellerId, or name
+  // Products belonging to this store - match by storeId, sellerId, slug, or seller name
   const storeProducts = products.filter(
     (p) =>
       p.sellerId === activeStore.id ||
       (activeStore.id && p.sellerId === activeStore.id.replace('store-', 'seller-')) ||
       (activeStore.id && p.sellerId === activeStore.id.replace('seller-', 'store-')) ||
       (activeStore.slug && p.sellerId?.includes(activeStore.slug)) ||
+      (activeStore.slug && p.sellerName?.toLowerCase().replace(/[^a-z0-9]/g, '-').includes(activeStore.slug)) ||
       (p.sellerName && activeStore.name && p.sellerName.toLowerCase().trim() === activeStore.name.toLowerCase().trim())
   );
 

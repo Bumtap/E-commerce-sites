@@ -52,28 +52,62 @@ export const FeaturedStores: React.FC = () => {
           name: seller.storeName,
           slug: seller.storeName.toLowerCase().replace(/[^a-z0-9]+/g, '-'),
           tagline: `Certified Bhutanese goods & craftsmanship from ${seller.storeName}`,
-          description: `Authentic local enterprise in Gelephu Mindfulness City managed by ${seller.ownerName}. Committed to sustainability, traditional artisan heritage, and high quality.`,
-          logo: 'https://images.unsplash.com/photo-1542838132-92c53300491e?w=200&auto=format&fit=crop&q=80',
-          coverImage: 'https://images.unsplash.com/photo-1506744038136-46273834b3fb?w=1200&auto=format&fit=crop&q=80',
+          description: seller.description || `Authentic local enterprise in Gelephu Mindfulness City managed by ${seller.ownerName}. Committed to sustainability, traditional artisan heritage, and high quality.`,
+          logo: seller.logo || 'https://images.unsplash.com/photo-1542838132-92c53300491e?w=200&auto=format&fit=crop&q=80',
+          coverImage: seller.coverImage || 'https://images.unsplash.com/photo-1506744038136-46273834b3fb?w=1200&auto=format&fit=crop&q=80',
           category: seller.category || 'General Merchant',
           rating: 5.0,
           reviewCount: 4,
           productCount: 0,
           isVerified: seller.isVerified ?? true,
-          location: 'GMC Central District, Gelephu',
-          address: 'GMC Central Mindfulness Sector, Gelephu, Bhutan',
+          location: seller.location || 'GMC Central District, Gelephu',
+          address: seller.location ? `${seller.location}, Gelephu, Bhutan` : 'GMC Central Mindfulness Sector, Gelephu, Bhutan',
           phone: seller.phone || '+975 17123456',
           email: seller.email || 'seller@gmc-bhutan.bt',
           openingHours: 'Mon - Sat: 9:00 AM - 6:00 PM',
-          joinedDate: seller.createdAt || '2024-01-01',
+          joinedDate: seller.createdAt || '2025-01-01',
           status: 'approved',
           ownerName: seller.ownerName,
         });
       }
     });
 
+    // 3. Scan products to discover any merchant or seller name not yet indexed
+    products.forEach((prod) => {
+      const sellerId = prod.sellerId || `store-${prod.sellerName.toLowerCase().replace(/[^a-z0-9]/g, '-')}`;
+      const existing = Array.from(storeMap.values()).find(
+        (s) =>
+          s.id === sellerId ||
+          s.name.toLowerCase().trim() === prod.sellerName.toLowerCase().trim()
+      );
+      if (!existing) {
+        storeMap.set(sellerId, {
+          id: sellerId,
+          name: prod.sellerName,
+          slug: prod.sellerName.toLowerCase().replace(/[^a-z0-9]+/g, '-'),
+          tagline: `Authentic offerings from ${prod.sellerName}`,
+          description: `Authorized Bhutanese merchant registered in Gelephu Mindfulness City. Browse all catalog items and order directly with city-wide delivery.`,
+          logo: prod.images[0] || 'https://images.unsplash.com/photo-1544717302-de2939b7ef71?w=150&auto=format&fit=crop&q=80',
+          coverImage: 'https://images.unsplash.com/photo-1500937386664-56d1dfef3854?w=1200&auto=format&fit=crop&q=80',
+          category: prod.category || 'General Goods',
+          rating: prod.rating || 5.0,
+          reviewCount: prod.reviewCount || 5,
+          productCount: 1,
+          isVerified: prod.sellerVerified ?? true,
+          location: 'GMC District, Gelephu',
+          address: 'GMC Municipal Market, Gelephu, Bhutan',
+          phone: '+975 17123456',
+          email: 'merchant@gmc-bhutan.bt',
+          openingHours: 'Daily: 8:00 AM - 7:00 PM',
+          joinedDate: '2025-01-01',
+          status: 'approved',
+          ownerName: prod.sellerName,
+        });
+      }
+    });
+
     return Array.from(storeMap.values());
-  }, [stores, sellers]);
+  }, [stores, sellers, products]);
 
   // Extract categories for filter pills
   const categories = useMemo(() => {

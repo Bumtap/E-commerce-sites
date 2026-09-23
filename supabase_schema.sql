@@ -1,6 +1,5 @@
 -- ==============================================================================
--- GMC MARKETPLACE SUPABASE SCHEMA INITIALIZATION
--- Run this script in your Supabase Project: SQL Editor -> New Query -> Run
+-- GMC MARKETPLACE SUPABASE SCHEMA (WITHOUT RLS)
 -- Project: GMC marketplace (gcrshkpaxiytbmifqujo)
 -- ==============================================================================
 
@@ -97,8 +96,20 @@ CREATE TABLE IF NOT EXISTS public.sellers (
   "joinedDate" TEXT,
   "isVerified" BOOLEAN DEFAULT true,
   status TEXT DEFAULT 'approved',
+  category TEXT,
+  description TEXT,
+  logo TEXT,
+  "coverImage" TEXT,
+  "createdAt" TEXT,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
+
+-- Ensure seller columns exist if table was created previously
+ALTER TABLE public.sellers ADD COLUMN IF NOT EXISTS category TEXT;
+ALTER TABLE public.sellers ADD COLUMN IF NOT EXISTS description TEXT;
+ALTER TABLE public.sellers ADD COLUMN IF NOT EXISTS logo TEXT;
+ALTER TABLE public.sellers ADD COLUMN IF NOT EXISTS "coverImage" TEXT;
+ALTER TABLE public.sellers ADD COLUMN IF NOT EXISTS "createdAt" TEXT;
 
 -- 5. ORDERS TABLE
 CREATE TABLE IF NOT EXISTS public.orders (
@@ -126,31 +137,21 @@ CREATE TABLE IF NOT EXISTS public.orders (
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- Enable Row Level Security (RLS) and public read/write access policies for client applet
-ALTER TABLE public.stores ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.categories ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.products ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.sellers ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.orders ENABLE ROW LEVEL SECURITY;
+-- Remove previous RLS policies if any existed
+DROP POLICY IF EXISTS "Allow public read access on stores" ON public.stores;
+DROP POLICY IF EXISTS "Allow public write access on stores" ON public.stores;
+DROP POLICY IF EXISTS "Allow public read access on categories" ON public.categories;
+DROP POLICY IF EXISTS "Allow public write access on categories" ON public.categories;
+DROP POLICY IF EXISTS "Allow public read access on products" ON public.products;
+DROP POLICY IF EXISTS "Allow public write access on products" ON public.products;
+DROP POLICY IF EXISTS "Allow public read access on sellers" ON public.sellers;
+DROP POLICY IF EXISTS "Allow public write access on sellers" ON public.sellers;
+DROP POLICY IF EXISTS "Allow public read access on orders" ON public.orders;
+DROP POLICY IF EXISTS "Allow public write access on orders" ON public.orders;
 
-CREATE POLICY "Allow public read access on stores" ON public.stores FOR SELECT USING (true);
-CREATE POLICY "Allow public write access on stores" ON public.stores FOR ALL USING (true);
-
-CREATE POLICY "Allow public read access on categories" ON public.categories FOR SELECT USING (true);
-CREATE POLICY "Allow public write access on categories" ON public.categories FOR ALL USING (true);
-
-CREATE POLICY "Allow public read access on products" ON public.products FOR SELECT USING (true);
-CREATE POLICY "Allow public write access on products" ON public.products FOR ALL USING (true);
-
-CREATE POLICY "Allow public read access on sellers" ON public.sellers FOR SELECT USING (true);
-CREATE POLICY "Allow public write access on sellers" ON public.sellers FOR ALL USING (true);
-
-CREATE POLICY "Allow public read access on orders" ON public.orders FOR SELECT USING (true);
-CREATE POLICY "Allow public write access on orders" ON public.orders FOR ALL USING (true);
-
--- Enable Realtime publication for tables
-ALTER PUBLICATION supabase_realtime ADD TABLE public.stores;
-ALTER PUBLICATION supabase_realtime ADD TABLE public.categories;
-ALTER PUBLICATION supabase_realtime ADD TABLE public.products;
-ALTER PUBLICATION supabase_realtime ADD TABLE public.sellers;
-ALTER PUBLICATION supabase_realtime ADD TABLE public.orders;
+-- Disable Row Level Security on all tables for full, direct access
+ALTER TABLE public.stores DISABLE ROW LEVEL SECURITY;
+ALTER TABLE public.categories DISABLE ROW LEVEL SECURITY;
+ALTER TABLE public.products DISABLE ROW LEVEL SECURITY;
+ALTER TABLE public.sellers DISABLE ROW LEVEL SECURITY;
+ALTER TABLE public.orders DISABLE ROW LEVEL SECURITY;

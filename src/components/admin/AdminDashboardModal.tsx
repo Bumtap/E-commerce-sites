@@ -8,6 +8,7 @@ import {
   X,
   LayoutDashboard,
   Package,
+  PackagePlus,
   Store as StoreIcon,
   Tag,
   Truck,
@@ -41,7 +42,11 @@ import {
   Heart,
   Gem,
   Check,
-  AlertTriangle
+  AlertTriangle,
+  Copy,
+  LogIn,
+  Mail,
+  RefreshCw
 } from 'lucide-react';
 
 const CATEGORY_IMAGE_PRESETS = [
@@ -103,6 +108,7 @@ export const AdminDashboardModal: React.FC = () => {
     isAdminPortalOpen,
     setIsAdminPortalOpen,
     products,
+    addProduct,
     updateProduct,
     deleteProduct,
     stores,
@@ -119,6 +125,13 @@ export const AdminDashboardModal: React.FC = () => {
     adminLogin,
     adminLogout,
     changeAdminPassword,
+    adminEmail,
+    setAdminEmail,
+    setAdminPasswordDirectly,
+    updateSellerPassword,
+    sellerLogin,
+    setUserRole,
+    setIsSellerPortalOpen,
     sellers,
     addSellerByAdmin,
     deleteSellerByAdmin,
@@ -130,9 +143,20 @@ export const AdminDashboardModal: React.FC = () => {
   >('overview');
 
   // Admin login gate states
+  const [adminLoginTab, setAdminLoginTab] = useState<'masterKey' | 'emailPassword' | 'setMasterKey'>('masterKey');
+  const [adminEmailInput, setAdminEmailInput] = useState(adminEmail || 'admin@gelephu.bt');
   const [adminPasswordInput, setAdminPasswordInput] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  const [directNewPass, setDirectNewPass] = useState('');
+  const [directConfirmPass, setDirectConfirmPass] = useState('');
   const [loginError, setLoginError] = useState('');
+  const [loginSuccessMsg, setLoginSuccessMsg] = useState('');
+
+  // Security tab state
+  const [adminEmailEdit, setAdminEmailEdit] = useState(adminEmail || 'admin@gelephu.bt');
+  const [sellerPasswordVisibility, setSellerPasswordVisibility] = useState<Record<string, boolean>>({});
+  const [editingSellerPassword, setEditingSellerPassword] = useState<{ id: string; storeName: string; email: string; currentPass?: string } | null>(null);
+  const [newSellerPasswordInput, setNewSellerPasswordInput] = useState('seller123');
 
   // Add Seller Provisioning Modal State
   const [showAddSellerModal, setShowAddSellerModal] = useState(false);
@@ -173,6 +197,97 @@ export const AdminDashboardModal: React.FC = () => {
         isVerified: true,
       });
     }
+  };
+
+  // Add Product Modal State for Admin
+  const [showAddProductModal, setShowAddProductModal] = useState(false);
+  const [productFormData, setProductFormData] = useState({
+    name: '',
+    price: '',
+    salePrice: '',
+    category: '',
+    sellerId: '',
+    stock: '15',
+    unit: 'piece',
+    description: '',
+    imageUrl: '',
+    isMadeInBhutan: true,
+    isOrganic: false,
+    isGmcExclusive: false,
+    isFeatured: false,
+    isFlashDeal: false,
+  });
+
+  const handleCreateProductSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!productFormData.name.trim() || !productFormData.price) {
+      showToast('Please enter Product Name and Price', 'error');
+      return;
+    }
+    const targetStore = stores.find((s) => s.id === productFormData.sellerId) || stores[0];
+    const catName = productFormData.category || categories[0]?.name || 'GMC Bhutan Specials';
+    const numPrice = Number(productFormData.price);
+    const numSalePrice = productFormData.salePrice ? Number(productFormData.salePrice) : undefined;
+    const discount =
+      numSalePrice && numPrice > numSalePrice
+        ? Math.round(((numPrice - numSalePrice) / numPrice) * 100)
+        : undefined;
+
+    addProduct({
+      name: productFormData.name.trim(),
+      slug: productFormData.name.toLowerCase().replace(/\s+/g, '-'),
+      description:
+        productFormData.description.trim() ||
+        'Mindful authentic product crafted in Gelephu Mindfulness City, Bhutan.',
+      shortDescription:
+        productFormData.description.trim().slice(0, 100) || 'Authentic quality GMC product.',
+      price: numPrice,
+      salePrice: numSalePrice,
+      discountPercentage: discount,
+      category: catName,
+      categoryId: catName.toLowerCase().replace(/[^a-z0-9]/g, '-'),
+      sellerId: targetStore?.id || 'store-gmc-organic',
+      sellerName: targetStore?.name || 'GMC Organic Farm Co-op',
+      sellerVerified: targetStore?.isVerified ?? true,
+      images: [
+        productFormData.imageUrl.trim() ||
+          'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=600&auto=format&fit=crop&q=80',
+      ],
+      rating: 5.0,
+      reviewCount: 0,
+      stock: Number(productFormData.stock) || 10,
+      lowStockThreshold: 5,
+      unit: productFormData.unit || 'piece',
+      sku: `GMC-${Math.floor(1000 + Math.random() * 9000)}`,
+      origin: targetStore?.location || 'Gelephu Mindfulness City',
+      isMadeInBhutan: productFormData.isMadeInBhutan,
+      isOrganic: productFormData.isOrganic,
+      isGmcExclusive: productFormData.isGmcExclusive,
+      isFeatured: productFormData.isFeatured,
+      isFlashDeal: productFormData.isFlashDeal,
+      isNewArrival: true,
+      tags: ['bhutan', 'gmc', 'authentic'],
+      createdAt: new Date().toISOString(),
+      isActive: true,
+    });
+
+    setShowAddProductModal(false);
+    setProductFormData({
+      name: '',
+      price: '',
+      salePrice: '',
+      category: categories[0]?.name || '',
+      sellerId: stores[0]?.id || '',
+      stock: '15',
+      unit: 'piece',
+      description: '',
+      imageUrl: '',
+      isMadeInBhutan: true,
+      isOrganic: false,
+      isGmcExclusive: false,
+      isFeatured: false,
+      isFlashDeal: false,
+    });
   };
 
   // Category management states
@@ -329,8 +444,49 @@ export const AdminDashboardModal: React.FC = () => {
   const handleAdminLoginSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     setLoginError('');
+    setLoginSuccessMsg('');
+
+    if (adminLoginTab === 'setMasterKey') {
+      if (!directNewPass.trim()) {
+        setLoginError('Please enter a new master password');
+        return;
+      }
+      if (directNewPass.length < 4) {
+        setLoginError('Password must be at least 4 characters long');
+        return;
+      }
+      if (directNewPass !== directConfirmPass) {
+        setLoginError('Passwords do not match');
+        return;
+      }
+      const res = setAdminPasswordDirectly(directNewPass.trim());
+      if (res.success) {
+        setLoginSuccessMsg('Master password updated and authenticated successfully!');
+        setDirectNewPass('');
+        setDirectConfirmPass('');
+      } else {
+        setLoginError(res.message);
+      }
+      return;
+    }
+
+    if (adminLoginTab === 'emailPassword') {
+      if (!adminEmailInput.trim() || !adminPasswordInput.trim()) {
+        setLoginError('Please enter both admin email and password');
+        return;
+      }
+      const res = adminLogin(adminEmailInput.trim(), adminPasswordInput.trim());
+      if (res.success) {
+        setAdminPasswordInput('');
+      } else {
+        setLoginError(res.message);
+      }
+      return;
+    }
+
+    // Default 'masterKey'
     if (!adminPasswordInput.trim()) {
-      setLoginError('Please enter the administrator password');
+      setLoginError('Please enter the administrator master password');
       return;
     }
     const res = adminLogin(adminPasswordInput.trim());
@@ -380,7 +536,7 @@ export const AdminDashboardModal: React.FC = () => {
     return (
       <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/80 backdrop-blur-xs overflow-y-auto animate-fadeIn">
         <div className="relative w-full max-w-md bg-white dark:bg-slate-900 rounded-3xl shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden my-auto p-6 sm:p-8">
-          <div className="flex items-center justify-between mb-6">
+          <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-3">
               <div className="w-12 h-12 rounded-2xl bg-amber-500/10 dark:bg-amber-500/20 text-amber-600 dark:text-amber-400 flex items-center justify-center border border-amber-500/20 shadow-xs">
                 <Lock className="w-6 h-6" />
@@ -390,7 +546,7 @@ export const AdminDashboardModal: React.FC = () => {
                   Admin Authority Console
                 </h3>
                 <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">
-                  Protected System Access
+                  Protected GMC System Access
                 </p>
               </div>
             </div>
@@ -402,58 +558,225 @@ export const AdminDashboardModal: React.FC = () => {
             </button>
           </div>
 
-          <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed mb-5">
-            This console is reserved for GMC Marketplace administrators. Enter the master administration key to unlock platform configuration, store approvals, vouchers, and catalog control.
-          </p>
+          {/* Mode Selector Tabs */}
+          <div className="flex p-1 bg-slate-100 dark:bg-slate-800 rounded-xl mb-4 text-xs font-bold">
+            <button
+              type="button"
+              onClick={() => {
+                setAdminLoginTab('masterKey');
+                setLoginError('');
+              }}
+              className={`flex-1 py-1.5 rounded-lg transition-all flex items-center justify-center gap-1 cursor-pointer ${
+                adminLoginTab === 'masterKey'
+                  ? 'bg-white dark:bg-slate-900 text-teal-800 dark:text-teal-300 shadow-xs'
+                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+              }`}
+            >
+              <Key className="w-3.5 h-3.5" />
+              <span>Master Key</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setAdminLoginTab('emailPassword');
+                setLoginError('');
+              }}
+              className={`flex-1 py-1.5 rounded-lg transition-all flex items-center justify-center gap-1 cursor-pointer ${
+                adminLoginTab === 'emailPassword'
+                  ? 'bg-white dark:bg-slate-900 text-teal-800 dark:text-teal-300 shadow-xs'
+                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+              }`}
+            >
+              <Mail className="w-3.5 h-3.5" />
+              <span>Email & Pass</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setAdminLoginTab('setMasterKey');
+                setLoginError('');
+              }}
+              className={`flex-1 py-1.5 rounded-lg transition-all flex items-center justify-center gap-1 cursor-pointer ${
+                adminLoginTab === 'setMasterKey'
+                  ? 'bg-white dark:bg-slate-900 text-teal-800 dark:text-teal-300 shadow-xs'
+                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+              }`}
+            >
+              <Shield className="w-3.5 h-3.5" />
+              <span>Set Key</span>
+            </button>
+          </div>
 
           <form onSubmit={handleAdminLoginSubmit} className="space-y-4">
-            <div>
-              <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
-                Master Admin Password
-              </label>
-              <div className="relative">
-                <input
-                  type={showPassword ? 'text' : 'password'}
-                  value={adminPasswordInput}
-                  onChange={(e) => {
-                    setAdminPasswordInput(e.target.value);
-                    setLoginError('');
-                  }}
-                  placeholder="Enter administrator password..."
-                  className="w-full pl-4 pr-10 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
-                  autoFocus
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer"
-                >
-                  {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                </button>
-              </div>
-              {loginError && (
-                <p className="text-xs text-rose-500 font-medium mt-1.5 flex items-center gap-1">
-                  <ShieldAlert className="w-3.5 h-3.5" />
-                  {loginError}
+            {adminLoginTab === 'masterKey' && (
+              <>
+                <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
+                  Enter your master administration security key to unlock catalog approvals, seller onboarding, and platform configuration.
                 </p>
-              )}
-            </div>
 
-            <div className="bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900/50 rounded-xl p-3 flex items-center justify-between text-xs">
-              <span className="text-amber-800 dark:text-amber-300 font-medium">
-                Default Master Key: <code className="font-mono font-bold bg-amber-100 dark:bg-amber-900 px-1.5 py-0.5 rounded">admin123</code>
-              </span>
-              <button
-                type="button"
-                onClick={() => {
-                  setAdminPasswordInput('admin123');
-                  setLoginError('');
-                }}
-                className="text-[11px] font-bold text-amber-700 dark:text-amber-400 hover:underline cursor-pointer"
-              >
-                Auto-fill
-              </button>
-            </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
+                    Master Admin Password
+                  </label>
+                  <div className="relative">
+                    <input
+                      type={showPassword ? 'text' : 'password'}
+                      value={adminPasswordInput}
+                      onChange={(e) => {
+                        setAdminPasswordInput(e.target.value);
+                        setLoginError('');
+                      }}
+                      placeholder="Enter administrator password..."
+                      className="w-full pl-4 pr-10 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
+                      autoFocus
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer"
+                    >
+                      {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
+                  </div>
+                </div>
+
+                <div className="bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900/50 rounded-xl p-3 flex items-center justify-between text-xs">
+                  <span className="text-amber-800 dark:text-amber-300 font-medium">
+                    Default Key: <code className="font-mono font-bold bg-amber-100 dark:bg-amber-900 px-1.5 py-0.5 rounded">admin123</code>
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setAdminPasswordInput('admin123');
+                      setLoginError('');
+                    }}
+                    className="text-[11px] font-bold text-amber-700 dark:text-amber-400 hover:underline cursor-pointer"
+                  >
+                    Auto-fill
+                  </button>
+                </div>
+              </>
+            )}
+
+            {adminLoginTab === 'emailPassword' && (
+              <>
+                <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
+                  Sign in with registered admin account credentials. Default admin account is configured for Gelephu city operations.
+                </p>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
+                    Admin Email Address
+                  </label>
+                  <input
+                    type="email"
+                    value={adminEmailInput}
+                    onChange={(e) => {
+                      setAdminEmailInput(e.target.value);
+                      setLoginError('');
+                    }}
+                    placeholder="admin@gelephu.bt"
+                    className="w-full px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
+                    Admin Password
+                  </label>
+                  <div className="relative">
+                    <input
+                      type={showPassword ? 'text' : 'password'}
+                      value={adminPasswordInput}
+                      onChange={(e) => {
+                        setAdminPasswordInput(e.target.value);
+                        setLoginError('');
+                      }}
+                      placeholder="Enter password..."
+                      className="w-full pl-4 pr-10 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer"
+                    >
+                      {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
+                  </div>
+                </div>
+
+                <div className="bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900/50 rounded-xl p-3 flex items-center justify-between text-xs">
+                  <span className="text-amber-800 dark:text-amber-300 font-medium">
+                    Demo: <code className="font-mono font-bold bg-amber-100 dark:bg-amber-900 px-1 py-0.5 rounded">admin@gelephu.bt</code> / <code className="font-mono font-bold bg-amber-100 dark:bg-amber-900 px-1 py-0.5 rounded">admin123</code>
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setAdminEmailInput('admin@gelephu.bt');
+                      setAdminPasswordInput('admin123');
+                      setLoginError('');
+                    }}
+                    className="text-[11px] font-bold text-amber-700 dark:text-amber-400 hover:underline cursor-pointer shrink-0"
+                  >
+                    Auto-fill
+                  </button>
+                </div>
+              </>
+            )}
+
+            {adminLoginTab === 'setMasterKey' && (
+              <>
+                <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
+                  Directly configure or set a new Master Administration Password. This overwrites the previous key and immediately authenticates you into the console.
+                </p>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
+                    New Master Password (min. 4 characters)
+                  </label>
+                  <input
+                    type="password"
+                    value={directNewPass}
+                    onChange={(e) => {
+                      setDirectNewPass(e.target.value);
+                      setLoginError('');
+                    }}
+                    placeholder="Enter new master password..."
+                    className="w-full px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
+                    Confirm New Master Password
+                  </label>
+                  <input
+                    type="password"
+                    value={directConfirmPass}
+                    onChange={(e) => {
+                      setDirectConfirmPass(e.target.value);
+                      setLoginError('');
+                    }}
+                    placeholder="Re-enter password to confirm..."
+                    className="w-full px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-teal-700"
+                  />
+                </div>
+              </>
+            )}
+
+            {loginError && (
+              <p className="text-xs text-rose-500 font-medium flex items-center gap-1.5">
+                <ShieldAlert className="w-3.5 h-3.5 shrink-0" />
+                <span>{loginError}</span>
+              </p>
+            )}
+
+            {loginSuccessMsg && (
+              <p className="text-xs text-emerald-600 dark:text-emerald-400 font-medium flex items-center gap-1.5">
+                <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
+                <span>{loginSuccessMsg}</span>
+              </p>
+            )}
 
             <div className="flex gap-2 pt-2">
               <button
@@ -468,7 +791,7 @@ export const AdminDashboardModal: React.FC = () => {
                 className="flex-1 py-2.5 rounded-xl bg-teal-800 hover:bg-teal-900 text-white font-bold text-xs shadow-md transition-colors cursor-pointer flex items-center justify-center gap-1.5"
               >
                 <Key className="w-4 h-4" />
-                Unlock Admin Console
+                {adminLoginTab === 'setMasterKey' ? 'Save & Unlock' : 'Unlock Admin Console'}
               </button>
             </div>
           </form>
@@ -644,11 +967,21 @@ export const AdminDashboardModal: React.FC = () => {
           {/* 2. PRODUCTS CATALOG TAB */}
           {activeTab === 'products' && (
             <div className="space-y-4">
-              <div>
-                <h4 className="font-bold text-sm text-slate-900 dark:text-white">Manage Marketplace Products</h4>
-                <p className="text-xs text-slate-500 dark:text-slate-400">
-                  Feature items on homepage or activate Today's Deals countdown ribbons.
-                </p>
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div>
+                  <h4 className="font-bold text-sm text-slate-900 dark:text-white">Manage Marketplace Products</h4>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">
+                    Feature items on homepage or activate Today's Deals countdown ribbons.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowAddProductModal(true)}
+                  className="px-3.5 py-2 bg-teal-800 hover:bg-teal-900 text-white rounded-xl text-xs font-bold shadow-2xs flex items-center gap-1.5 transition-all cursor-pointer w-fit"
+                >
+                  <PackagePlus className="w-4 h-4" />
+                  <span>Add New Product</span>
+                </button>
               </div>
 
               <div className="border border-slate-200 dark:border-slate-800 rounded-2xl overflow-hidden bg-white dark:bg-slate-850 shadow-2xs">
@@ -1025,25 +1358,66 @@ export const AdminDashboardModal: React.FC = () => {
 
           {/* 7. SECURITY & ACCESS TAB */}
           {activeTab === 'security' && (
-            <div className="space-y-6 max-w-2xl">
-              {/* Password Management */}
+            <div className="space-y-6 max-w-3xl">
+              {/* Admin Account Credentials */}
               <div className="p-5 rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-850 space-y-4">
-                <div className="flex items-center gap-2.5">
-                  <div className="w-8 h-8 rounded-lg bg-teal-50 dark:bg-teal-950/60 text-teal-800 dark:text-teal-300 flex items-center justify-center border border-teal-200 dark:border-teal-800">
-                    <Key className="w-4 h-4" />
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-8 h-8 rounded-lg bg-teal-50 dark:bg-teal-950/60 text-teal-800 dark:text-teal-300 flex items-center justify-center border border-teal-200 dark:border-teal-800">
+                      <Shield className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <h4 className="font-bold text-sm text-slate-900 dark:text-white">Admin Account & Master Key</h4>
+                      <p className="text-xs text-slate-500 dark:text-slate-400">
+                        Configure master email and password for GMC Marketplace administration
+                      </p>
+                    </div>
                   </div>
+                  <span className="text-[11px] font-mono px-2 py-0.5 rounded-md bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 font-bold">
+                    Active Authority
+                  </span>
+                </div>
+
+                {/* Email config */}
+                <div className="p-3.5 bg-slate-50 dark:bg-slate-900/60 rounded-xl border border-slate-200 dark:border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
                   <div>
-                    <h4 className="font-bold text-sm text-slate-900 dark:text-white">Change Master Admin Password</h4>
-                    <p className="text-xs text-slate-500 dark:text-slate-400">
-                      Update the security key required to access this authority console
-                    </p>
+                    <span className="font-bold text-slate-700 dark:text-slate-300 block">Master Admin Email</span>
+                    <span className="text-slate-500 dark:text-slate-400 text-[11px]">Used for official email/password login</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="email"
+                      value={adminEmailEdit}
+                      onChange={(e) => setAdminEmailEdit(e.target.value)}
+                      className="px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white font-mono text-xs w-48 focus:outline-none focus:ring-1 focus:ring-teal-700"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (!adminEmailEdit.trim()) {
+                          showToast('Admin email cannot be empty', 'error');
+                          return;
+                        }
+                        setAdminEmail(adminEmailEdit.trim());
+                        showToast('Admin email updated successfully!', 'success');
+                      }}
+                      className="px-3 py-1.5 bg-teal-800 hover:bg-teal-900 text-white rounded-lg font-bold text-xs transition-colors cursor-pointer"
+                    >
+                      Save Email
+                    </button>
                   </div>
                 </div>
 
+                {/* Password Change Form */}
                 <form onSubmit={handleChangePasswordSubmit} className="space-y-3 pt-2">
+                  <div className="flex items-center gap-2">
+                    <Key className="w-3.5 h-3.5 text-slate-400" />
+                    <span className="text-xs font-bold text-slate-800 dark:text-slate-200">Change Master Password</span>
+                  </div>
+
                   <div>
                     <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                      Current Admin Password
+                      Current Master Password
                     </label>
                     <input
                       type="password"
@@ -1058,7 +1432,7 @@ export const AdminDashboardModal: React.FC = () => {
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div>
                       <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                        New Password
+                        New Master Password
                       </label>
                       <input
                         type="password"
@@ -1089,12 +1463,12 @@ export const AdminDashboardModal: React.FC = () => {
                     className="mt-2 px-4 py-2 bg-teal-800 hover:bg-teal-900 text-white rounded-xl text-xs font-bold transition-colors cursor-pointer shadow-xs flex items-center gap-1.5"
                   >
                     <CheckCircle2 className="w-3.5 h-3.5" />
-                    Save New Admin Password
+                    Save New Master Password
                   </button>
                 </form>
               </div>
 
-              {/* Registered Merchant Credentials Summary */}
+              {/* Registered Merchant Credentials Summary & Management */}
               <div className="p-5 rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-850 space-y-4">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                   <div className="flex items-center gap-2.5">
@@ -1102,9 +1476,11 @@ export const AdminDashboardModal: React.FC = () => {
                       <UserCheck className="w-4 h-4" />
                     </div>
                     <div>
-                      <h4 className="font-bold text-sm text-slate-900 dark:text-white">Registered Merchant Logins ({sellers.length})</h4>
+                      <h4 className="font-bold text-sm text-slate-900 dark:text-white">
+                        Registered Merchant Accounts & Logins ({sellers.length})
+                      </h4>
                       <p className="text-xs text-slate-500 dark:text-slate-400">
-                        Merchants with permission to manage items under their store ID
+                        View merchant login emails, passwords, set new credentials, or log in as any storefront
                       </p>
                     </div>
                   </div>
@@ -1118,60 +1494,260 @@ export const AdminDashboardModal: React.FC = () => {
                   </button>
                 </div>
 
-                <div className="space-y-2 pt-1">
-                  {sellers.map((s) => (
-                    <div
-                      key={s.id}
-                      className="p-3 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-900/60 flex flex-wrap items-center justify-between gap-3 text-xs"
-                    >
-                      <div>
-                        <div className="flex items-center gap-1.5">
-                          <span className="font-bold text-slate-900 dark:text-white">{s.storeName}</span>
-                          <span className="bg-teal-100 dark:bg-teal-900/60 text-teal-800 dark:text-teal-200 text-[10px] font-bold px-1.5 py-0.5 rounded">
-                            {s.isVerified ? 'Verified' : 'Pending'}
-                          </span>
+                <div className="space-y-3 pt-1">
+                  {sellers.map((s) => {
+                    const isPassVisible = sellerPasswordVisibility[s.id] ?? false;
+                    const sellerPassword = s.password || 'seller123';
+
+                    return (
+                      <div
+                        key={s.id}
+                        className="p-3.5 rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-900/60 flex flex-col gap-2.5 text-xs transition-all hover:border-slate-300 dark:hover:border-slate-700"
+                      >
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <div className="flex items-center gap-2">
+                            <span className="font-extrabold text-sm text-slate-900 dark:text-white">
+                              {s.storeName}
+                            </span>
+                            <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${
+                              s.isVerified
+                                ? 'bg-teal-100 dark:bg-teal-900/60 text-teal-800 dark:text-teal-200'
+                                : 'bg-amber-100 dark:bg-amber-900/60 text-amber-800 dark:text-amber-200'
+                            }`}>
+                              {s.isVerified ? 'GMC Verified' : 'Pending Approval'}
+                            </span>
+                            <span className="text-[10px] bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 px-1.5 py-0.5 rounded font-semibold">
+                              {s.category || 'General'}
+                            </span>
+                          </div>
+
+                          <div className="flex items-center gap-1.5">
+                            {/* 1-Click Login As Merchant */}
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const res = sellerLogin(s.email, sellerPassword);
+                                if (res.success) {
+                                  setUserRole('seller');
+                                  setIsSellerPortalOpen(true);
+                                  setIsAdminPortalOpen(false);
+                                  showToast(`Logged in as ${s.storeName}`, 'success');
+                                } else {
+                                  showToast(res.message, 'error');
+                                }
+                              }}
+                              className="px-2.5 py-1 bg-amber-500/10 hover:bg-amber-500/20 text-amber-700 dark:text-amber-400 border border-amber-500/30 rounded-lg text-[11px] font-bold flex items-center gap-1 transition-colors cursor-pointer"
+                              title="Sign in directly as this seller into the merchant dashboard"
+                            >
+                              <LogIn className="w-3.5 h-3.5" />
+                              <span>Login as Store</span>
+                            </button>
+
+                            {/* Set Password Button */}
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setEditingSellerPassword({
+                                  id: s.id,
+                                  storeName: s.storeName,
+                                  email: s.email,
+                                  currentPass: sellerPassword,
+                                });
+                                setNewSellerPasswordInput(sellerPassword);
+                              }}
+                              className="px-2.5 py-1 bg-teal-50 dark:bg-teal-950/60 hover:bg-teal-100 text-teal-800 dark:text-teal-300 border border-teal-200 dark:border-teal-800 rounded-lg text-[11px] font-bold flex items-center gap-1 transition-colors cursor-pointer"
+                              title="Set or reset this merchant's password"
+                            >
+                              <Key className="w-3.5 h-3.5" />
+                              <span>Set Password</span>
+                            </button>
+
+                            {/* WhatsApp */}
+                            <a
+                              href={formatWhatsAppUrl(
+                                s.phone,
+                                `Kuzu Zangpo! Hello ${s.ownerName}, official message from GMC Marketplace Admin regarding your store account.`
+                              )}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="p-1.5 bg-emerald-50 dark:bg-emerald-950/60 hover:bg-emerald-100 text-emerald-800 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 rounded-lg transition-colors cursor-pointer"
+                              title="WhatsApp merchant"
+                            >
+                              <MessageCircle className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+                            </a>
+
+                            {/* Delete */}
+                            <button
+                              onClick={() => {
+                                if (window.confirm(`Delete merchant login for "${s.storeName}" (${s.email})?`)) {
+                                  deleteSellerByAdmin(s.id);
+                                }
+                              }}
+                              className="p-1.5 text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 rounded-lg hover:bg-rose-50 dark:hover:bg-rose-950/30 transition-colors cursor-pointer"
+                              title="Remove merchant login"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
                         </div>
-                        <p className="text-slate-500 dark:text-slate-400 text-[11px] mt-0.5">
-                          Contact: {s.ownerName} • Phone: {s.phone}
-                        </p>
-                        <p className="text-teal-700 dark:text-teal-300 font-mono text-[11px]">
-                          Login Email: {s.email}
-                        </p>
-                      </div>
 
-                      <div className="flex items-center gap-2">
-                        <a
-                          href={formatWhatsAppUrl(
-                            s.phone,
-                            `Kuzu Zangpo! Hello ${s.ownerName}, official message from GMC Marketplace Admin regarding your store account.`
-                          )}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="bg-emerald-50 dark:bg-emerald-950/60 hover:bg-emerald-100 text-emerald-800 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 text-[11px] font-bold px-2 py-1 rounded-lg flex items-center gap-1 transition-colors cursor-pointer"
-                          title="WhatsApp merchant"
-                        >
-                          <MessageCircle className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
-                          <span>WhatsApp</span>
-                        </a>
+                        {/* Credentials detail bar */}
+                        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2 pt-1 border-t border-slate-200/60 dark:border-slate-800/80 text-[11px]">
+                          <div>
+                            <span className="text-slate-400 dark:text-slate-500 block">Owner / Phone</span>
+                            <span className="font-semibold text-slate-700 dark:text-slate-300">
+                              {s.ownerName} ({s.phone})
+                            </span>
+                          </div>
 
-                        <button
-                          onClick={() => {
-                            if (window.confirm(`Delete merchant login for "${s.storeName}" (${s.email})?`)) {
-                              deleteSellerByAdmin(s.id);
-                            }
-                          }}
-                          className="p-1.5 text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 rounded-lg hover:bg-rose-50 dark:hover:bg-rose-950/30 transition-colors cursor-pointer"
-                          title="Remove merchant login"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
+                          <div className="flex items-center justify-between bg-white dark:bg-slate-800/70 px-2.5 py-1 rounded-lg border border-slate-200/70 dark:border-slate-700/60">
+                            <span className="font-mono text-teal-800 dark:text-teal-300 truncate max-w-[130px]">
+                              {s.email}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                navigator.clipboard.writeText(s.email);
+                                showToast('Email copied to clipboard', 'info');
+                              }}
+                              className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-0.5 cursor-pointer"
+                              title="Copy email"
+                            >
+                              <Copy className="w-3 h-3" />
+                            </button>
+                          </div>
+
+                          <div className="flex items-center justify-between bg-white dark:bg-slate-800/70 px-2.5 py-1 rounded-lg border border-slate-200/70 dark:border-slate-700/60">
+                            <div className="flex items-center gap-1.5">
+                              <span className="text-slate-400 dark:text-slate-500 text-[10px]">Pass:</span>
+                              <span className="font-mono font-bold text-slate-800 dark:text-slate-200">
+                                {isPassVisible ? sellerPassword : '••••••••'}
+                              </span>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setSellerPasswordVisibility((prev) => ({
+                                  ...prev,
+                                  [s.id]: !prev[s.id],
+                                }));
+                              }}
+                              className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-0.5 cursor-pointer"
+                              title={isPassVisible ? 'Hide password' : 'Show password'}
+                            >
+                              {isPassVisible ? <EyeOff className="w-3 h-3" /> : <Eye className="w-3 h-3" />}
+                            </button>
+                          </div>
+                        </div>
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
             </div>
           )}
+        </div>
+
+        {/* Modal: Set / Reset Merchant Password */}
+        {editingSellerPassword && (
+          <div className="fixed inset-0 z-60 bg-slate-950/70 backdrop-blur-xs flex items-center justify-center p-4">
+            <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl w-full max-w-md shadow-2xl p-6 space-y-4 animate-in fade-in zoom-in-95 duration-150">
+              <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-9 h-9 rounded-xl bg-teal-800 text-white flex items-center justify-center font-bold">
+                    <Key className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <h3 className="font-extrabold text-slate-900 dark:text-white text-sm">
+                      Set Merchant Login Password
+                    </h3>
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400 truncate max-w-[240px]">
+                      {editingSellerPassword.storeName}
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setEditingSellerPassword(null)}
+                  className="p-1 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 rounded-lg cursor-pointer"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <div className="p-3 bg-slate-50 dark:bg-slate-800 rounded-xl text-xs space-y-1">
+                <span className="text-slate-400 dark:text-slate-500 text-[10px] uppercase font-bold block">
+                  Store Login Account
+                </span>
+                <span className="font-mono font-bold text-teal-800 dark:text-teal-300 block">
+                  {editingSellerPassword.email}
+                </span>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
+                  New Password (min. 4 characters)
+                </label>
+                <input
+                  type="text"
+                  value={newSellerPasswordInput}
+                  onChange={(e) => setNewSellerPasswordInput(e.target.value)}
+                  placeholder="Enter new password..."
+                  className="w-full px-3.5 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-teal-700 font-mono"
+                  autoFocus
+                />
+              </div>
+
+              {/* Presets */}
+              <div className="flex items-center gap-2">
+                <span className="text-[11px] text-slate-400">Quick set:</span>
+                <button
+                  type="button"
+                  onClick={() => setNewSellerPasswordInput('seller123')}
+                  className="text-[11px] font-mono px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800 hover:bg-teal-50 dark:hover:bg-teal-950 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 cursor-pointer"
+                >
+                  seller123
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setNewSellerPasswordInput('gmc2026')}
+                  className="text-[11px] font-mono px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800 hover:bg-teal-50 dark:hover:bg-teal-950 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 cursor-pointer"
+                >
+                  gmc2026
+                </button>
+              </div>
+
+              <div className="flex gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setEditingSellerPassword(null)}
+                  className="flex-1 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 font-bold text-xs hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={async () => {
+                    if (!newSellerPasswordInput.trim() || newSellerPasswordInput.length < 4) {
+                      showToast('Password must be at least 4 characters', 'error');
+                      return;
+                    }
+                    const res = await updateSellerPassword(editingSellerPassword.id, newSellerPasswordInput.trim());
+                    if (res.success) {
+                      showToast(`Password updated for ${editingSellerPassword.storeName}!`, 'success');
+                      setEditingSellerPassword(null);
+                    } else {
+                      showToast(res.message, 'error');
+                    }
+                  }}
+                  className="flex-1 py-2 rounded-xl bg-teal-800 hover:bg-teal-900 text-white font-bold text-xs shadow-md transition-colors cursor-pointer flex items-center justify-center gap-1.5"
+                >
+                  <Check className="w-4 h-4" />
+                  Save & Sync Password
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
         </div>
 
         {/* Modal: Add New Seller / Store Provisioning */}
@@ -1366,6 +1942,231 @@ export const AdminDashboardModal: React.FC = () => {
                   >
                     <UserPlus className="w-4 h-4" />
                     <span>Create & Onboard Seller</span>
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
+
+        {/* Modal: Add New Marketplace Product */}
+        {showAddProductModal && (
+          <div className="fixed inset-0 z-60 bg-slate-950/70 backdrop-blur-xs flex items-center justify-center p-4">
+            <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl w-full max-w-xl shadow-2xl max-h-[90vh] flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+              <div className="px-6 py-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-9 h-9 rounded-xl bg-teal-800 text-white flex items-center justify-center font-bold">
+                    <PackagePlus className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h3 className="font-extrabold text-slate-900 dark:text-white text-base">
+                      Add New Product (Supabase)
+                    </h3>
+                    <p className="text-xs text-slate-500 dark:text-slate-400">
+                      Publish a new item under any registered merchant
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowAddProductModal(false)}
+                  className="p-1.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <form onSubmit={handleCreateProductSubmit} className="p-6 overflow-y-auto space-y-4 text-xs">
+                <div>
+                  <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">
+                    Product Name *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="e.g. Gelephu Forest Wild Raw Honey"
+                    value={productFormData.name}
+                    onChange={(e) => setProductFormData({ ...productFormData, name: e.target.value })}
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white font-medium focus:ring-2 focus:ring-teal-700 outline-hidden"
+                  />
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">
+                      Assigned Merchant / Store *
+                    </label>
+                    <select
+                      value={productFormData.sellerId || (stores[0]?.id || '')}
+                      onChange={(e) => setProductFormData({ ...productFormData, sellerId: e.target.value })}
+                      className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white font-medium focus:ring-2 focus:ring-teal-700 outline-hidden"
+                    >
+                      {stores.map((s) => (
+                        <option key={s.id} value={s.id}>
+                          {s.name} ({s.location})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">
+                      Category *
+                    </label>
+                    <select
+                      value={productFormData.category || (categories[0]?.name || '')}
+                      onChange={(e) => setProductFormData({ ...productFormData, category: e.target.value })}
+                      className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white font-medium focus:ring-2 focus:ring-teal-700 outline-hidden"
+                    >
+                      {categories.map((c) => (
+                        <option key={c.id} value={c.name}>
+                          {c.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div>
+                    <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">
+                      Price (Nu.) *
+                    </label>
+                    <input
+                      type="number"
+                      required
+                      min="1"
+                      placeholder="e.g. 450"
+                      value={productFormData.price}
+                      onChange={(e) => setProductFormData({ ...productFormData, price: e.target.value })}
+                      className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white font-bold focus:ring-2 focus:ring-teal-700 outline-hidden"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">
+                      Sale Price (Nu.)
+                    </label>
+                    <input
+                      type="number"
+                      min="1"
+                      placeholder="Optional discount"
+                      value={productFormData.salePrice}
+                      onChange={(e) => setProductFormData({ ...productFormData, salePrice: e.target.value })}
+                      className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white font-bold focus:ring-2 focus:ring-teal-700 outline-hidden"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">
+                      Initial Stock
+                    </label>
+                    <input
+                      type="number"
+                      min="1"
+                      placeholder="15"
+                      value={productFormData.stock}
+                      onChange={(e) => setProductFormData({ ...productFormData, stock: e.target.value })}
+                      className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white font-medium focus:ring-2 focus:ring-teal-700 outline-hidden"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">
+                    Image URL
+                  </label>
+                  <input
+                    type="url"
+                    placeholder="https://images.unsplash.com/..."
+                    value={productFormData.imageUrl}
+                    onChange={(e) => setProductFormData({ ...productFormData, imageUrl: e.target.value })}
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white font-medium focus:ring-2 focus:ring-teal-700 outline-hidden"
+                  />
+                  <p className="text-[10px] text-slate-400 mt-1">
+                    Leave blank to use an organic Bhutanese product placeholder.
+                  </p>
+                </div>
+
+                <div>
+                  <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">
+                    Description & Specifications
+                  </label>
+                  <textarea
+                    rows={2}
+                    placeholder="Authentic handcrafted or harvested in Gelephu, Bhutan..."
+                    value={productFormData.description}
+                    onChange={(e) => setProductFormData({ ...productFormData, description: e.target.value })}
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white font-medium focus:ring-2 focus:ring-teal-700 outline-hidden resize-none"
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 pt-1">
+                  <label className="flex items-center gap-2 text-xs font-semibold text-slate-700 dark:text-slate-300 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={productFormData.isMadeInBhutan}
+                      onChange={(e) => setProductFormData({ ...productFormData, isMadeInBhutan: e.target.checked })}
+                      className="w-4 h-4 rounded text-teal-700 focus:ring-teal-600 cursor-pointer"
+                    />
+                    <span>Made in Bhutan</span>
+                  </label>
+
+                  <label className="flex items-center gap-2 text-xs font-semibold text-slate-700 dark:text-slate-300 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={productFormData.isOrganic}
+                      onChange={(e) => setProductFormData({ ...productFormData, isOrganic: e.target.checked })}
+                      className="w-4 h-4 rounded text-teal-700 focus:ring-teal-600 cursor-pointer"
+                    />
+                    <span>100% Organic</span>
+                  </label>
+
+                  <label className="flex items-center gap-2 text-xs font-semibold text-slate-700 dark:text-slate-300 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={productFormData.isGmcExclusive}
+                      onChange={(e) => setProductFormData({ ...productFormData, isGmcExclusive: e.target.checked })}
+                      className="w-4 h-4 rounded text-teal-700 focus:ring-teal-600 cursor-pointer"
+                    />
+                    <span>GMC Exclusive</span>
+                  </label>
+
+                  <label className="flex items-center gap-2 text-xs font-semibold text-slate-700 dark:text-slate-300 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={productFormData.isFeatured}
+                      onChange={(e) => setProductFormData({ ...productFormData, isFeatured: e.target.checked })}
+                      className="w-4 h-4 rounded text-teal-700 focus:ring-teal-600 cursor-pointer"
+                    />
+                    <span>Feature on Home</span>
+                  </label>
+
+                  <label className="flex items-center gap-2 text-xs font-semibold text-slate-700 dark:text-slate-300 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={productFormData.isFlashDeal}
+                      onChange={(e) => setProductFormData({ ...productFormData, isFlashDeal: e.target.checked })}
+                      className="w-4 h-4 rounded text-teal-700 focus:ring-teal-600 cursor-pointer"
+                    />
+                    <span>Flash Deal</span>
+                  </label>
+                </div>
+
+                <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-end gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setShowAddProductModal(false)}
+                    className="px-4 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 font-bold hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    className="px-5 py-2 rounded-xl bg-teal-800 hover:bg-teal-900 text-white font-bold shadow-xs cursor-pointer transition-all flex items-center gap-1.5"
+                  >
+                    <PackagePlus className="w-4 h-4" />
+                    <span>Publish Product to Supabase</span>
                   </button>
                 </div>
               </form>

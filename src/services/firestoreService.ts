@@ -68,7 +68,6 @@ class FirestoreService {
       const prodSnap = await getDocs(collection(db, 'products'));
       if (prodSnap.empty) {
         console.log('Seeding initial products to Firestore...');
-        // Chunk batches of up to 450 items (Firestore limit is 500)
         const batch = writeBatch(db);
         INITIAL_PRODUCTS.forEach((prod) => {
           batch.set(doc(db, 'products', prod.id), cleanForFirestore(prod));
@@ -77,6 +76,44 @@ class FirestoreService {
       }
     } catch (err) {
       console.warn('Firestore initial seeding note:', err);
+    }
+  }
+
+  // Synchronize any locally created stores, sellers, or products to Firestore
+  async syncLocalDataToFirestore(
+    localStores: Store[],
+    localSellers: SellerAccount[],
+    localProducts: Product[]
+  ) {
+    try {
+      const storeSnap = await getDocs(collection(db, 'stores'));
+      const existingStoreIds = new Set(storeSnap.docs.map((d) => d.id));
+      for (const store of localStores) {
+        if (!existingStoreIds.has(store.id)) {
+          console.log(`Syncing store "${store.name}" to cloud Firestore...`);
+          await this.saveStore(store);
+        }
+      }
+
+      const sellerSnap = await getDocs(collection(db, 'sellers'));
+      const existingSellerIds = new Set(sellerSnap.docs.map((d) => d.id));
+      for (const seller of localSellers) {
+        if (!existingSellerIds.has(seller.id)) {
+          console.log(`Syncing seller account "${seller.storeName}" to cloud Firestore...`);
+          await this.saveSeller(seller);
+        }
+      }
+
+      const prodSnap = await getDocs(collection(db, 'products'));
+      const existingProdIds = new Set(prodSnap.docs.map((d) => d.id));
+      for (const prod of localProducts) {
+        if (!existingProdIds.has(prod.id)) {
+          console.log(`Syncing product "${prod.name}" to cloud Firestore...`);
+          await this.saveProduct(prod);
+        }
+      }
+    } catch (err) {
+      console.warn('Error during local to Firestore sync:', err);
     }
   }
 

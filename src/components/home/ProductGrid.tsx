@@ -40,9 +40,12 @@ export const ProductGrid: React.FC<ProductGridProps> = ({
       )
     : null;
 
-  // Extract unique sellers for the quick seller filter
+  // Extract unique sellers for the quick seller filter, including all registered stores
   const uniqueSellers = React.useMemo(() => {
     const map = new Map<string, { id: string; name: string }>();
+    stores.forEach((s) => {
+      map.set(s.id, { id: s.id, name: s.name });
+    });
     products.forEach((p) => {
       const id = p.sellerId || p.sellerName;
       if (!map.has(id)) {
@@ -50,15 +53,23 @@ export const ProductGrid: React.FC<ProductGridProps> = ({
       }
     });
     return Array.from(map.values());
-  }, [products]);
+  }, [products, stores]);
 
   // All products are visible to customers so they can browse and order every item
   const filteredProducts = products.filter((p) => {
     // Seller filter
     if (selectedSellerFilter !== 'all') {
+      const targetStore = stores.find((s) => s.id === selectedSellerFilter || s.name.toLowerCase().trim() === selectedSellerFilter.toLowerCase().trim());
       const matchSeller =
         p.sellerId === selectedSellerFilter ||
-        p.sellerName.toLowerCase().trim() === selectedSellerFilter.toLowerCase().trim();
+        p.sellerName.toLowerCase().trim() === selectedSellerFilter.toLowerCase().trim() ||
+        (targetStore && (
+          p.sellerId === targetStore.id ||
+          (targetStore.id && p.sellerId === targetStore.id.replace('store-', 'seller-')) ||
+          (targetStore.id && p.sellerId === targetStore.id.replace('seller-', 'store-')) ||
+          (targetStore.slug && p.sellerId?.includes(targetStore.slug)) ||
+          (p.sellerName && targetStore.name && p.sellerName.toLowerCase().trim() === targetStore.name.toLowerCase().trim())
+        ));
       if (!matchSeller) return false;
     }
 
@@ -279,11 +290,31 @@ export const ProductGrid: React.FC<ProductGridProps> = ({
                         if (matchedStore) {
                           setActiveStore(matchedStore);
                         } else {
-                          setSelectedSellerFilter(product.sellerId || product.sellerName);
+                          setActiveStore({
+                            id: product.sellerId || `store-${product.sellerName.toLowerCase().replace(/[^a-z0-9]/g, '-')}`,
+                            name: product.sellerName,
+                            slug: product.sellerName.toLowerCase().replace(/[^a-z0-9]/g, '-'),
+                            tagline: `Authentic Bhutanese offerings from ${product.sellerName}`,
+                            description: `Verified merchant in Gelephu Mindfulness City. Browse all catalog items and place orders with doorstep delivery.`,
+                            logo: product.images[0] || 'https://images.unsplash.com/photo-1544717302-de2939b7ef71?w=150&auto=format&fit=crop&q=80',
+                            coverImage: 'https://images.unsplash.com/photo-1500937386664-56d1dfef3854?w=1200&auto=format&fit=crop&q=80',
+                            category: product.category,
+                            location: 'GMC District, Gelephu',
+                            address: 'GMC Central Market, Gelephu, Bhutan',
+                            phone: '+975 17123456',
+                            email: 'merchant@gmc-bhutan.bt',
+                            openingHours: 'Daily: 8:00 AM - 7:00 PM',
+                            rating: product.rating || 5.0,
+                            reviewCount: product.reviewCount || 1,
+                            productCount: 1,
+                            isVerified: product.sellerVerified ?? true,
+                            joinedDate: '2025-01-01',
+                            status: 'approved',
+                          });
                         }
                       }}
                       className="flex items-center gap-1 text-[11px] text-slate-600 dark:text-slate-400 hover:text-teal-700 dark:hover:text-teal-300 font-semibold mb-1 transition-colors text-left group/seller cursor-pointer w-fit"
-                      title={`Explore seller: ${product.sellerName}`}
+                      title={`Explore storefront: ${product.sellerName}`}
                     >
                       <span className="truncate group-hover/seller:underline">{product.sellerName}</span>
                       {product.sellerVerified && (

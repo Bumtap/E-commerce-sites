@@ -42,6 +42,7 @@ const STORAGE_KEYS = {
   SELLERS: 'gmc_sellers_v1',
   CURRENT_SELLER: 'gmc_current_seller_v1',
   ADMIN_PASSWORD: 'gmc_admin_password_v1',
+  ADMIN_EMAIL: 'gmc_admin_email_v1',
   ADMIN_AUTH: 'gmc_admin_auth_v1',
 };
 
@@ -608,21 +609,71 @@ class StorageService {
     return { success: true, message: `Store ${toDelete.name} removed` };
   }
 
-  authenticateSeller(email: string, password: string): { success: boolean; message: string; seller?: SellerAccount } {
+  authenticateSeller(emailOrHandle: string, password: string): { success: boolean; message: string; seller?: SellerAccount } {
     const sellers = this.getSellers();
-    const normalizedEmail = email.trim().toLowerCase();
-    const found = sellers.find((s) => s.email.toLowerCase() === normalizedEmail);
+    const query = emailOrHandle.trim().toLowerCase();
+
+    // Map common aliases to default sellers
+    const aliasMap: Record<string, string> = {
+      'farm': 'contact@gmcorganic.bt',
+      'organic': 'contact@gmcorganic.bt',
+      'farm@gelephu.bt': 'contact@gmcorganic.bt',
+      'textiles': 'sales@khandrotex.bt',
+      'weaving': 'sales@khandrotex.bt',
+      'textiles@gelephu.bt': 'sales@khandrotex.bt',
+      'honey': 'info@sarpanghoney.bt',
+      'apiary': 'info@sarpanghoney.bt',
+      'honey@gelephu.bt': 'info@sarpanghoney.bt',
+      'tea': 'order@bhutantea.bt',
+      'herbs': 'order@bhutantea.bt',
+      'tea@gelephu.bt': 'order@bhutantea.bt',
+      'herbs@gelephu.bt': 'order@bhutantea.bt',
+      'crafts': 'art@drukcrafts.bt',
+      'handicrafts': 'art@drukcrafts.bt',
+      'crafts@gelephu.bt': 'art@drukcrafts.bt',
+      'handicrafts@gelephu.bt': 'art@drukcrafts.bt',
+    };
+
+    const targetEmail = aliasMap[query] || query;
+
+    const found = sellers.find(
+      (s) =>
+        s.email.toLowerCase() === targetEmail ||
+        s.email.toLowerCase() === query ||
+        s.storeName.toLowerCase() === query ||
+        s.storeId.toLowerCase() === query
+    );
 
     if (!found) {
-      return { success: false, message: 'No registered seller found with this email' };
+      return { success: false, message: 'No registered seller found with this email or handle' };
     }
 
-    if (found.password && found.password !== password) {
-      return { success: false, message: 'Incorrect password. Try seller123 or check your credentials.' };
+    const expectedPassword = found.password || 'seller123';
+    if (expectedPassword && expectedPassword !== password.trim()) {
+      return { success: false, message: 'Incorrect password. (Default is seller123)' };
     }
 
     this.setCurrentSeller(found);
     return { success: true, message: `Welcome back, ${found.storeName}!`, seller: found };
+  }
+
+  updateSellerPassword(sellerId: string, newPassword: string): { success: boolean; message: string } {
+    const sellers = this.getSellers();
+    const idx = sellers.findIndex((s) => s.id === sellerId || s.storeId === sellerId);
+    if (idx === -1) {
+      return { success: false, message: 'Seller not found' };
+    }
+
+    sellers[idx].password = newPassword.trim();
+    this.set(STORAGE_KEYS.SELLERS, sellers);
+
+    const current = this.getCurrentSeller();
+    if (current && (current.id === sellerId || current.storeId === sellerId)) {
+      current.password = newPassword.trim();
+      this.setCurrentSeller(current);
+    }
+
+    return { success: true, message: 'Store password updated successfully' };
   }
 
   logoutSeller(): void {
@@ -630,12 +681,32 @@ class StorageService {
   }
 
   // --- Admin Security & Password ---
+  getAdminEmail(): string {
+    return this.get<string>(STORAGE_KEYS.ADMIN_EMAIL, 'admin@gelephu.bt');
+  }
+
+  setAdminEmail(email: string): void {
+    this.set(STORAGE_KEYS.ADMIN_EMAIL, email.trim());
+  }
+
   getAdminPassword(): string {
     return this.get<string>(STORAGE_KEYS.ADMIN_PASSWORD, 'admin123');
   }
 
   setAdminPassword(password: string): void {
-    this.set(STORAGE_KEYS.ADMIN_PASSWORD, password);
+    this.set(STORAGE_KEYS.ADMIN_PASSWORD, password.trim());
+  }
+
+  getAdminCredentials(): { email: string; password: string } {
+    return {
+      email: this.getAdminEmail(),
+      password: this.getAdminPassword(),
+    };
+  }
+
+  setAdminCredentials(email: string, password: string): void {
+    this.setAdminEmail(email);
+    this.setAdminPassword(password);
   }
 
   isAdminAuthenticated(): boolean {
@@ -649,6 +720,28 @@ class StorageService {
   verifyAdminPassword(input: string): boolean {
     const actual = this.getAdminPassword();
     return input.trim() === actual.trim();
+  }
+
+  verifyAdminLogin(identifierOrPassword: string, password?: string): boolean {
+    const actualPassword = this.getAdminPassword();
+    const actualEmail = this.getAdminEmail().toLowerCase();
+
+    // If only one parameter is passed (password or master key)
+    if (password === undefined) {
+      return identifierOrPassword.trim() === actualPassword.trim();
+    }
+
+    // If both email/username and password are provided
+    const id = identifierOrPassword.trim().toLowerCase();
+    const isPasswordValid = password.trim() === actualPassword.trim();
+    const isEmailValid =
+      id === actualEmail ||
+      id === 'admin' ||
+      id === 'admin@gelephu.bt' ||
+      id === 'admin@gmc.bt' ||
+      id === 'infotshongla@gmail.com';
+
+    return isPasswordValid && isEmailValid;
   }
 
   logoutAdmin(): void {

@@ -7,8 +7,7 @@ import {
 } from '../data/mockData';
 import { DEFAULT_SELLERS } from './storageService';
 
-// Supabase table names (or json-backed collections)
-// Supports dedicated tables or fallback to app_collection table
+// Supabase table names and operations
 export class SupabaseService {
   private isInitialized = false;
 
@@ -17,41 +16,48 @@ export class SupabaseService {
     this.isInitialized = true;
 
     try {
-      // Test if supabase tables exist, otherwise initialize safely
-      const { data: testStores, error } = await supabase.from('stores').select('id').limit(1);
-      if (error) {
-        console.warn('Supabase tables notice:', error.message);
-        return;
-      }
-
-      // If stores table exists and is empty, seed initial stores
-      if (!testStores || testStores.length === 0) {
+      // 1. Stores table verification & seeding
+      const { data: testStores, error: storesErr } = await supabase.from('stores').select('id').limit(1);
+      if (!storesErr && (!testStores || testStores.length === 0)) {
         console.log('Seeding stores to Supabase...');
         await supabase.from('stores').upsert(INITIAL_STORES);
       }
 
-      // If products table exists and is empty, seed initial products
-      const { data: testProds } = await supabase.from('products').select('id').limit(1);
-      if (!testProds || testProds.length === 0) {
-        console.log('Seeding products to Supabase...');
-        await supabase.from('products').upsert(INITIAL_PRODUCTS);
-      }
-
-      // If categories table exists and is empty, seed initial categories
-      const { data: testCats } = await supabase.from('categories').select('id').limit(1);
-      if (!testCats || testCats.length === 0) {
+      // 2. Categories table verification & seeding
+      const { data: testCats, error: catsErr } = await supabase.from('categories').select('id').limit(1);
+      if (!catsErr && (!testCats || testCats.length === 0)) {
         console.log('Seeding categories to Supabase...');
         await supabase.from('categories').upsert(INITIAL_CATEGORIES);
       }
 
-      // If sellers table exists and is empty, seed initial sellers
-      const { data: testSellers } = await supabase.from('sellers').select('id').limit(1);
-      if (!testSellers || testSellers.length === 0) {
+      // 3. Products table verification & seeding
+      const { data: testProds, error: prodsErr } = await supabase.from('products').select('id').limit(1);
+      if (!prodsErr && (!testProds || testProds.length === 0)) {
+        console.log('Seeding products to Supabase...');
+        await supabase.from('products').upsert(INITIAL_PRODUCTS);
+      }
+
+      // 4. Sellers table verification & seeding
+      const { data: testSellers, error: sellersErr } = await supabase.from('sellers').select('id').limit(1);
+      if (!sellersErr && (!testSellers || testSellers.length === 0)) {
         console.log('Seeding sellers to Supabase...');
-        await supabase.from('sellers').upsert(DEFAULT_SELLERS);
+        const sanitizedSellers = DEFAULT_SELLERS.map((s) => ({
+          id: s.id,
+          email: s.email,
+          password: s.password || 'seller123',
+          storeId: s.storeId,
+          storeName: s.storeName,
+          ownerName: s.ownerName || '',
+          phone: s.phone || '',
+          location: s.location || '',
+          joinedDate: s.joinedDate || new Date().toISOString().split('T')[0],
+          isVerified: s.isVerified !== undefined ? s.isVerified : true,
+          status: s.status || 'approved',
+        }));
+        await supabase.from('sellers').upsert(sanitizedSellers);
       }
     } catch (err) {
-      console.warn('Supabase seeding notice:', err);
+      console.warn('Supabase initialization notice:', err);
     }
   }
 
@@ -131,7 +137,7 @@ export class SupabaseService {
 
   subscribeStores(callback: (stores: Store[]) => void): () => void {
     const channel = supabase
-      .channel('public:stores')
+      .channel('realtime:stores')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'stores' }, async () => {
         const fresh = await this.fetchStores();
         if (fresh.length > 0) callback(fresh);
@@ -145,7 +151,7 @@ export class SupabaseService {
 
   subscribeProducts(callback: (products: Product[]) => void): () => void {
     const channel = supabase
-      .channel('public:products')
+      .channel('realtime:products')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'products' }, async () => {
         const fresh = await this.fetchProducts();
         if (fresh.length > 0) callback(fresh);
@@ -159,7 +165,7 @@ export class SupabaseService {
 
   subscribeCategories(callback: (categories: Category[]) => void): () => void {
     const channel = supabase
-      .channel('public:categories')
+      .channel('realtime:categories')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'categories' }, async () => {
         const fresh = await this.fetchCategories();
         if (fresh.length > 0) callback(fresh);
@@ -173,7 +179,7 @@ export class SupabaseService {
 
   subscribeSellers(callback: (sellers: SellerAccount[]) => void): () => void {
     const channel = supabase
-      .channel('public:sellers')
+      .channel('realtime:sellers')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'sellers' }, async () => {
         const fresh = await this.fetchSellers();
         if (fresh.length > 0) callback(fresh);
@@ -187,7 +193,7 @@ export class SupabaseService {
 
   subscribeOrders(callback: (orders: Order[]) => void): () => void {
     const channel = supabase
-      .channel('public:orders')
+      .channel('realtime:orders')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, async () => {
         const fresh = await this.fetchOrders();
         if (fresh.length > 0) callback(fresh);
@@ -201,84 +207,209 @@ export class SupabaseService {
 
   // --- Mutations (Save / Delete) ---
 
-  async saveStore(store: Store): Promise<void> {
+  async saveStore(store: Store): Promise<boolean> {
     try {
-      const { error } = await supabase.from('stores').upsert(store);
-      if (error) console.warn('Supabase saveStore warning:', error.message);
+      const payload = {
+        ...store,
+        rating: Number(store.rating || 5),
+        reviewCount: Number(store.reviewCount || 0),
+        productCount: Number(store.productCount || 0),
+        isVerified: store.isVerified !== undefined ? store.isVerified : true,
+      };
+      const { error } = await supabase.from('stores').upsert(payload);
+      if (error) {
+        console.warn('Supabase saveStore warning:', error.message);
+        return false;
+      }
+      return true;
     } catch (err) {
       console.warn('Supabase saveStore error:', err);
+      return false;
     }
   }
 
-  async deleteStore(storeId: string): Promise<void> {
+  async deleteStore(storeId: string): Promise<boolean> {
     try {
       const { error } = await supabase.from('stores').delete().eq('id', storeId);
-      if (error) console.warn('Supabase deleteStore warning:', error.message);
+      if (error) {
+        console.warn('Supabase deleteStore warning:', error.message);
+        return false;
+      }
+      return true;
     } catch (err) {
       console.warn('Supabase deleteStore error:', err);
+      return false;
     }
   }
 
-  async saveProduct(product: Product): Promise<void> {
+  async saveProduct(product: Product): Promise<boolean> {
     try {
-      const { error } = await supabase.from('products').upsert(product);
-      if (error) console.warn('Supabase saveProduct warning:', error.message);
+      // Clean undefined fields and guarantee proper formats for Postgres columns
+      const payload = {
+        ...product,
+        price: Number(product.price),
+        salePrice: product.salePrice ? Number(product.salePrice) : null,
+        discountPercentage: product.discountPercentage ? Number(product.discountPercentage) : null,
+        stock: Number(product.stock ?? 10),
+        lowStockThreshold: Number(product.lowStockThreshold ?? 5),
+        rating: Number(product.rating ?? 5),
+        reviewCount: Number(product.reviewCount ?? 0),
+        images: Array.isArray(product.images) ? product.images : [],
+        variants: Array.isArray(product.variants) ? product.variants : [],
+        tags: Array.isArray(product.tags) ? product.tags : [],
+        attributes: product.attributes || {},
+        isOrganic: Boolean(product.isOrganic),
+        isMadeInBhutan: Boolean(product.isMadeInBhutan),
+        isGmcExclusive: Boolean(product.isGmcExclusive),
+        isFeatured: Boolean(product.isFeatured),
+        isBestSeller: Boolean(product.isBestSeller),
+        isNewArrival: Boolean(product.isNewArrival),
+        isFlashDeal: Boolean(product.isFlashDeal),
+        isActive: product.isActive !== undefined ? Boolean(product.isActive) : true,
+      };
+
+      const { error } = await supabase.from('products').upsert(payload);
+      if (error) {
+        console.warn('Supabase saveProduct warning:', error.message);
+        return false;
+      }
+      return true;
     } catch (err) {
       console.warn('Supabase saveProduct error:', err);
+      return false;
     }
   }
 
-  async deleteProduct(productId: string): Promise<void> {
+  async deleteProduct(productId: string): Promise<boolean> {
     try {
       const { error } = await supabase.from('products').delete().eq('id', productId);
-      if (error) console.warn('Supabase deleteProduct warning:', error.message);
+      if (error) {
+        console.warn('Supabase deleteProduct warning:', error.message);
+        return false;
+      }
+      return true;
     } catch (err) {
       console.warn('Supabase deleteProduct error:', err);
+      return false;
     }
   }
 
-  async saveCategory(category: Category): Promise<void> {
+  async saveCategory(category: Category): Promise<boolean> {
     try {
-      const { error } = await supabase.from('categories').upsert(category);
-      if (error) console.warn('Supabase saveCategory warning:', error.message);
+      const payload = {
+        ...category,
+        itemCount: Number(category.itemCount || 0),
+        order: Number(category.order || 1),
+        featured: category.featured !== undefined ? Boolean(category.featured) : true,
+        isActive: category.isActive !== undefined ? Boolean(category.isActive) : true,
+      };
+      const { error } = await supabase.from('categories').upsert(payload);
+      if (error) {
+        console.warn('Supabase saveCategory warning:', error.message);
+        return false;
+      }
+      return true;
     } catch (err) {
       console.warn('Supabase saveCategory error:', err);
+      return false;
     }
   }
 
-  async deleteCategory(categoryId: string): Promise<void> {
+  async deleteCategory(categoryId: string): Promise<boolean> {
     try {
       const { error } = await supabase.from('categories').delete().eq('id', categoryId);
-      if (error) console.warn('Supabase deleteCategory warning:', error.message);
+      if (error) {
+        console.warn('Supabase deleteCategory warning:', error.message);
+        return false;
+      }
+      return true;
     } catch (err) {
       console.warn('Supabase deleteCategory error:', err);
+      return false;
     }
   }
 
-  async saveSeller(seller: SellerAccount): Promise<void> {
+  async saveSeller(seller: SellerAccount): Promise<boolean> {
     try {
+      // First try complete payload
       const { error } = await supabase.from('sellers').upsert(seller);
-      if (error) console.warn('Supabase saveSeller warning:', error.message);
+      if (!error) return true;
+
+      // If specific custom columns do not exist in the Supabase schema, sanitize to schema columns
+      const sanitized = {
+        id: seller.id,
+        email: seller.email,
+        password: seller.password || 'seller123',
+        storeId: seller.storeId,
+        storeName: seller.storeName,
+        ownerName: seller.ownerName || '',
+        phone: seller.phone || '',
+        location: seller.location || '',
+        joinedDate: seller.joinedDate || new Date().toISOString().split('T')[0],
+        isVerified: seller.isVerified !== undefined ? seller.isVerified : true,
+        status: seller.status || 'approved',
+      };
+      const retry = await supabase.from('sellers').upsert(sanitized);
+      if (retry.error) {
+        console.warn('Supabase saveSeller retry error:', retry.error.message);
+        return false;
+      }
+      return true;
     } catch (err) {
       console.warn('Supabase saveSeller error:', err);
+      return false;
     }
   }
 
-  async deleteSeller(sellerId: string): Promise<void> {
+  async deleteSeller(sellerId: string): Promise<boolean> {
     try {
       const { error } = await supabase.from('sellers').delete().eq('id', sellerId);
-      if (error) console.warn('Supabase deleteSeller warning:', error.message);
+      if (error) {
+        console.warn('Supabase deleteSeller warning:', error.message);
+        return false;
+      }
+      return true;
     } catch (err) {
       console.warn('Supabase deleteSeller error:', err);
+      return false;
     }
   }
 
-  async saveOrder(order: Order): Promise<void> {
+  async updateSellerPassword(sellerId: string, newPass: string): Promise<boolean> {
     try {
-      const { error } = await supabase.from('orders').upsert(order);
-      if (error) console.warn('Supabase saveOrder warning:', error.message);
+      const { error } = await supabase.from('sellers').update({ password: newPass }).eq('id', sellerId);
+      if (error) {
+        console.warn('Supabase updateSellerPassword warning:', error.message);
+        return false;
+      }
+      return true;
+    } catch (err) {
+      console.warn('Supabase updateSellerPassword error:', err);
+      return false;
+    }
+  }
+
+  async saveOrder(order: Order): Promise<boolean> {
+    try {
+      const payload = {
+        ...order,
+        subtotal: Number(order.subtotal),
+        deliveryFee: Number(order.deliveryFee || 0),
+        discount: Number(order.discount || 0),
+        tax: Number(order.tax || 0),
+        grandTotal: Number(order.grandTotal),
+        items: Array.isArray(order.items) ? order.items : [],
+        statusHistory: Array.isArray(order.statusHistory) ? order.statusHistory : [],
+      };
+      const { error } = await supabase.from('orders').upsert(payload);
+      if (error) {
+        console.warn('Supabase saveOrder warning:', error.message);
+        return false;
+      }
+      return true;
     } catch (err) {
       console.warn('Supabase saveOrder error:', err);
+      return false;
     }
   }
 }

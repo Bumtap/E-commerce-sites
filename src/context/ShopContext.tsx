@@ -18,6 +18,19 @@ import {
 } from '../types';
 import { storageService, DEFAULT_USER } from '../services/storageService';
 import { supabaseService } from '../services/supabaseService';
+import { firestoreService } from '../services/firestoreService';
+
+// Utility helper to merge cloud arrays with local arrays without losing newly added items
+const mergeById = <T extends { id: string }>(primary: T[], fallback: T[]): T[] => {
+  const map = new Map<string, T>();
+  (fallback || []).forEach((item) => {
+    if (item && item.id) map.set(item.id, item);
+  });
+  (primary || []).forEach((item) => {
+    if (item && item.id) map.set(item.id, item);
+  });
+  return Array.from(map.values());
+};
 
 interface ToastInfo {
   id: string;
@@ -295,34 +308,59 @@ export const ShopProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   useEffect(() => {
     refreshData();
 
-    // 1. Initialize & Seed Supabase tables if not yet populated
-    supabaseService.initializeAndSeed();
+    // 1. Initialize Firestore & seed if empty, plus sync any locally created stores/products to cloud
+    const initializeCloud = async () => {
+      try {
+        await firestoreService.initializeAndSeed();
+        await firestoreService.syncLocalDataToFirestore(
+          storageService.getStores(),
+          storageService.getSellers(),
+          storageService.getProducts()
+        );
+      } catch (e) {
+        console.warn('Cloud initial setup note:', e);
+      }
 
-    // 2. Immediate active fetch for fast cloud hydration across all browsers and Netlify visitors
+      // Safe secondary seed for Supabase
+      supabaseService.initializeAndSeed();
+    };
+    initializeCloud();
+
+    // 2. Active fetch for fast cloud hydration across all browsers and devices
     const syncFromCloud = async () => {
       try {
-        const [cloudProducts, cloudStores, cloudSellers, cloudCategories] = await Promise.all([
-          supabaseService.fetchProducts(),
-          supabaseService.fetchStores(),
-          supabaseService.fetchSellers(),
-          supabaseService.fetchCategories(),
+        const [cloudProducts, cloudStores, cloudSellers, cloudCategories, cloudOrders] = await Promise.all([
+          firestoreService.fetchProducts(),
+          firestoreService.fetchStores(),
+          firestoreService.fetchSellers(),
+          firestoreService.fetchCategories(),
+          firestoreService.fetchOrders(),
         ]);
 
-        if (cloudProducts.length > 0) {
-          setProducts(cloudProducts);
-          storageService.setProducts(cloudProducts);
-        }
         if (cloudStores.length > 0) {
-          setStores(cloudStores);
-          storageService.setStores(cloudStores);
+          const mergedStores = mergeById(cloudStores, storageService.getStores());
+          setStores(mergedStores);
+          storageService.setStores(mergedStores);
+        }
+        if (cloudProducts.length > 0) {
+          const mergedProducts = mergeById(cloudProducts, storageService.getProducts());
+          setProducts(mergedProducts);
+          storageService.setProducts(mergedProducts);
         }
         if (cloudSellers.length > 0) {
-          setSellers(cloudSellers);
-          storageService.setSellers(cloudSellers);
+          const mergedSellers = mergeById(cloudSellers, storageService.getSellers());
+          setSellers(mergedSellers);
+          storageService.setSellers(mergedSellers);
         }
         if (cloudCategories.length > 0) {
-          setCategories(cloudCategories);
-          storageService.setCategories(cloudCategories);
+          const mergedCategories = mergeById(cloudCategories, storageService.getCategories());
+          setCategories(mergedCategories);
+          storageService.setCategories(mergedCategories);
+        }
+        if (cloudOrders.length > 0) {
+          const mergedOrders = mergeById(cloudOrders, storageService.getOrders());
+          setOrders(mergedOrders);
+          storageService.setOrders(mergedOrders);
         }
       } catch (e) {
         console.warn('Initial cloud hydration note:', e);
@@ -330,39 +368,66 @@ export const ShopProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     };
     syncFromCloud();
 
-    // 3. Real-time subscriptions for all public visitors across devices
-    const unsubProducts = supabaseService.subscribeProducts((cloudProducts) => {
+    // 3. Firestore Real-time subscriptions for all public visitors across devices
+    const unsubProducts = firestoreService.subscribeProducts((cloudProducts) => {
       if (cloudProducts && cloudProducts.length > 0) {
-        setProducts(cloudProducts);
-        storageService.setProducts(cloudProducts);
+        setProducts((prev) => {
+          const merged = mergeById(cloudProducts, prev);
+          storageService.setProducts(merged);
+          return merged;
+        });
       }
     });
 
-    const unsubStores = supabaseService.subscribeStores((cloudStores) => {
+    const unsubStores = firestoreService.subscribeStores((cloudStores) => {
       if (cloudStores && cloudStores.length > 0) {
-        setStores(cloudStores);
-        storageService.setStores(cloudStores);
+        setStores((prev) => {
+          const merged = mergeById(cloudStores, prev);
+          storageService.setStores(merged);
+          return merged;
+        });
       }
     });
 
-    const unsubCategories = supabaseService.subscribeCategories((cloudCategories) => {
+    const unsubCategories = firestoreService.subscribeCategories((cloudCategories) => {
       if (cloudCategories && cloudCategories.length > 0) {
-        setCategories(cloudCategories);
-        storageService.setCategories(cloudCategories);
+        setCategories((prev) => {
+          const merged = mergeById(cloudCategories, prev);
+          storageService.setCategories(merged);
+          return merged;
+        });
       }
     });
 
-    const unsubSellers = supabaseService.subscribeSellers((cloudSellers) => {
+    const unsubSellers = firestoreService.subscribeSellers((cloudSellers) => {
       if (cloudSellers && cloudSellers.length > 0) {
-        setSellers(cloudSellers);
-        storageService.setSellers(cloudSellers);
+        setSellers((prev) => {
+          const merged = mergeById(cloudSellers, prev);
+          storageService.setSellers(merged);
+          return merged;
+        });
       }
     });
 
-    const unsubOrders = supabaseService.subscribeOrders((cloudOrders) => {
+    const unsubOrders = firestoreService.subscribeOrders((cloudOrders) => {
       if (cloudOrders && cloudOrders.length > 0) {
-        setOrders(cloudOrders);
-        storageService.setOrders(cloudOrders);
+        setOrders((prev) => {
+          const merged = mergeById(cloudOrders, prev);
+          storageService.setOrders(merged);
+          return merged;
+        });
+      }
+    });
+
+    // Secondary Supabase listeners for backup
+    const unsubSubaProducts = supabaseService.subscribeProducts((cloudProducts) => {
+      if (cloudProducts && cloudProducts.length > 0) {
+        setProducts((prev) => mergeById(cloudProducts, prev));
+      }
+    });
+    const unsubSubaStores = supabaseService.subscribeStores((cloudStores) => {
+      if (cloudStores && cloudStores.length > 0) {
+        setStores((prev) => mergeById(cloudStores, prev));
       }
     });
 
@@ -372,6 +437,8 @@ export const ShopProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       unsubCategories();
       unsubSellers();
       unsubOrders();
+      unsubSubaProducts();
+      unsubSubaStores();
     };
   }, []);
 
@@ -551,6 +618,8 @@ export const ShopProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   }) => {
     const res = storageService.registerSeller(data);
     if (res.success && res.seller && res.store) {
+      firestoreService.saveStore(res.store);
+      firestoreService.saveSeller(res.seller);
       supabaseService.saveStore(res.store);
       supabaseService.saveSeller(res.seller);
       setSellers(storageService.getSellers());
@@ -590,6 +659,8 @@ export const ShopProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       false // Keep admin in their session, do not auto-login as seller
     );
     if (res.success && res.seller && res.store) {
+      firestoreService.saveStore(res.store);
+      firestoreService.saveSeller(res.seller);
       supabaseService.saveStore(res.store);
       supabaseService.saveSeller(res.seller);
       setSellers(storageService.getSellers());
@@ -608,8 +679,10 @@ export const ShopProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }
     const seller = sellers.find((s) => s.id === sellerId);
     if (seller?.storeId) {
+      firestoreService.deleteStore(seller.storeId);
       supabaseService.deleteStore(seller.storeId);
     }
+    firestoreService.deleteSeller(sellerId);
     supabaseService.deleteSeller(sellerId);
     const res = storageService.deleteSeller(sellerId);
     if (res.success) {
@@ -626,6 +699,7 @@ export const ShopProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       showToast('Access Restricted: Only administrators have rights to delete stores.', 'error');
       return { success: false, message: 'Administrator authentication required.' };
     }
+    firestoreService.deleteStore(storeId);
     supabaseService.deleteStore(storeId);
     const res = storageService.deleteStore(storeId);
     if (res.success) {
@@ -706,8 +780,9 @@ export const ShopProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       ],
     };
 
-    // Save to storage and Supabase
+    // Save to storage, Firestore and Supabase
     storageService.saveOrder(newOrder);
+    firestoreService.saveOrder(newOrder);
     supabaseService.saveOrder(newOrder);
 
     // Reduce stock and log transaction
@@ -718,6 +793,7 @@ export const ShopProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         const nextStock = Math.max(0, prevStock - item.quantity);
         const updated = { ...prod, stock: nextStock };
         storageService.saveProduct(updated);
+        firestoreService.saveProduct(updated);
         supabaseService.saveProduct(updated);
         storageService.logInventoryTransaction({
           productId: prod.id,
@@ -753,6 +829,7 @@ export const ShopProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const updateOrderStatus = (orderId: string, status: Order['status'], note?: string) => {
     const updated = storageService.updateOrderStatus(orderId, status, note);
     if (updated) {
+      firestoreService.saveOrder(updated);
       supabaseService.saveOrder(updated);
       setOrders(storageService.getOrders());
       if (trackingOrder?.id === orderId) {
@@ -785,6 +862,7 @@ export const ShopProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       id: `prod-${Date.now()}`,
     };
     storageService.saveProduct(newProduct);
+    firestoreService.saveProduct(newProduct);
     supabaseService.saveProduct(newProduct);
     setProducts(storageService.getProducts());
     showToast(`Product "${newProduct.name}" listed under ${targetSellerName}`, 'success');
@@ -814,6 +892,7 @@ export const ShopProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }
 
     storageService.saveProduct(target);
+    firestoreService.saveProduct(target);
     supabaseService.saveProduct(target);
     setProducts(storageService.getProducts());
     showToast(`Product "${target.name}" updated`, 'success');
@@ -836,6 +915,7 @@ export const ShopProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }
 
     storageService.deleteProduct(productId);
+    firestoreService.deleteProduct(productId);
     supabaseService.deleteProduct(productId);
     setProducts(storageService.getProducts());
     showToast('Product deleted', 'info');
@@ -885,6 +965,7 @@ export const ShopProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     };
 
     storageService.saveCategory(newCategory);
+    firestoreService.saveCategory(newCategory);
     supabaseService.saveCategory(newCategory);
     setCategories(storageService.getCategories());
     showToast(`Category "${newCategory.name}" added successfully`, 'success');
@@ -901,6 +982,7 @@ export const ShopProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     const oldCat = oldCategories.find((c) => c.id === category.id);
 
     storageService.saveCategory(category);
+    firestoreService.saveCategory(category);
     supabaseService.saveCategory(category);
     setCategories(storageService.getCategories());
 
@@ -913,6 +995,7 @@ export const ShopProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           p.category = category.name;
           p.categoryId = category.id;
           changed = true;
+          firestoreService.saveProduct(p);
           supabaseService.saveProduct(p);
         }
       });
@@ -932,6 +1015,7 @@ export const ShopProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }
 
     storageService.deleteCategory(categoryId);
+    firestoreService.deleteCategory(categoryId);
     supabaseService.deleteCategory(categoryId);
     setCategories(storageService.getCategories());
     showToast('Category deleted', 'info');
@@ -956,6 +1040,7 @@ export const ShopProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }
 
     storageService.saveStore(target);
+    firestoreService.saveStore(target);
     supabaseService.saveStore(target);
     setStores(storageService.getStores());
     showToast(`Store "${target.name}" updated`, 'success');

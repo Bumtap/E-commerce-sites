@@ -244,5 +244,7 @@ export interface SellerAccount {
   logo?: string;
   coverImage?: string;
   createdAt: string;
+  joinedDate?: string;
+  status?: 'pending' | 'approved' | 'rejected' | 'suspended';
   isVerified: boolean;
 }
