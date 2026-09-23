@@ -127,7 +127,7 @@ interface ShopContextType {
     description?: string;
     logo?: string;
     coverImage?: string;
-  }) => { success: boolean; message: string; seller?: SellerAccount };
+  }) => Promise<{ success: boolean; message: string; seller?: SellerAccount; store?: Store }>;
   sellerLogout: () => void;
   addSellerByAdmin: (data: {
     storeName: string;
@@ -141,7 +141,7 @@ interface ShopContextType {
     logo?: string;
     coverImage?: string;
     isVerified?: boolean;
-  }) => { success: boolean; message: string; seller?: SellerAccount; store?: Store };
+  }) => Promise<{ success: boolean; message: string; seller?: SellerAccount; store?: Store }>;
   deleteSellerByAdmin: (sellerId: string) => { success: boolean; message: string };
   deleteStoreByAdmin: (storeId: string) => { success: boolean; message: string };
 
@@ -604,7 +604,7 @@ export const ShopProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     return res;
   };
 
-  const sellerRegister = (data: {
+  const sellerRegister = async (data: {
     storeName: string;
     ownerName: string;
     email: string;
@@ -618,8 +618,14 @@ export const ShopProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   }) => {
     const res = storageService.registerSeller(data);
     if (res.success && res.seller && res.store) {
-      firestoreService.saveStore(res.store);
-      firestoreService.saveSeller(res.seller);
+      try {
+        await Promise.allSettled([
+          firestoreService.saveStore(res.store),
+          firestoreService.saveSeller(res.seller),
+        ]);
+      } catch (err) {
+        console.warn('Firestore sync note on seller registration:', err);
+      }
       supabaseService.saveStore(res.store);
       supabaseService.saveSeller(res.seller);
       setSellers(storageService.getSellers());
@@ -638,7 +644,7 @@ export const ShopProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     showToast('Signed out of Merchant Portal', 'info');
   };
 
-  const addSellerByAdmin = (data: {
+  const addSellerByAdmin = async (data: {
     storeName: string;
     ownerName: string;
     email: string;
@@ -659,8 +665,14 @@ export const ShopProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       false // Keep admin in their session, do not auto-login as seller
     );
     if (res.success && res.seller && res.store) {
-      firestoreService.saveStore(res.store);
-      firestoreService.saveSeller(res.seller);
+      try {
+        await Promise.allSettled([
+          firestoreService.saveStore(res.store),
+          firestoreService.saveSeller(res.seller),
+        ]);
+      } catch (err) {
+        console.warn('Firestore sync note on admin seller onboarding:', err);
+      }
       supabaseService.saveStore(res.store);
       supabaseService.saveSeller(res.seller);
       setSellers(storageService.getSellers());

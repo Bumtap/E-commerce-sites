@@ -90,8 +90,12 @@ class FirestoreService {
       const existingStoreIds = new Set(storeSnap.docs.map((d) => d.id));
       for (const store of localStores) {
         if (!existingStoreIds.has(store.id)) {
-          console.log(`Syncing store "${store.name}" to cloud Firestore...`);
-          await this.saveStore(store);
+          try {
+            console.log(`Syncing store "${store.name}" (${store.id}) to cloud Firestore...`);
+            await this.saveStore(store);
+          } catch (e) {
+            console.warn(`Error syncing store ${store.id}:`, e);
+          }
         }
       }
 
@@ -99,8 +103,12 @@ class FirestoreService {
       const existingSellerIds = new Set(sellerSnap.docs.map((d) => d.id));
       for (const seller of localSellers) {
         if (!existingSellerIds.has(seller.id)) {
-          console.log(`Syncing seller account "${seller.storeName}" to cloud Firestore...`);
-          await this.saveSeller(seller);
+          try {
+            console.log(`Syncing seller account "${seller.storeName}" (${seller.id}) to cloud Firestore...`);
+            await this.saveSeller(seller);
+          } catch (e) {
+            console.warn(`Error syncing seller ${seller.id}:`, e);
+          }
         }
       }
 
@@ -108,8 +116,12 @@ class FirestoreService {
       const existingProdIds = new Set(prodSnap.docs.map((d) => d.id));
       for (const prod of localProducts) {
         if (!existingProdIds.has(prod.id)) {
-          console.log(`Syncing product "${prod.name}" to cloud Firestore...`);
-          await this.saveProduct(prod);
+          try {
+            console.log(`Syncing product "${prod.name}" (${prod.id}) to cloud Firestore...`);
+            await this.saveProduct(prod);
+          } catch (e) {
+            console.warn(`Error syncing product ${prod.id}:`, e);
+          }
         }
       }
     } catch (err) {
@@ -273,7 +285,7 @@ class FirestoreService {
     try {
       await setDoc(doc(db, 'stores', store.id), cleanForFirestore(store), { merge: true });
     } catch (error) {
-      handleFirestoreError(error, OperationType.WRITE, path);
+      handleFirestoreError(error, OperationType.WRITE, path, false);
     }
   }
 
@@ -282,7 +294,7 @@ class FirestoreService {
     try {
       await deleteDoc(doc(db, 'stores', storeId));
     } catch (error) {
-      handleFirestoreError(error, OperationType.DELETE, path);
+      handleFirestoreError(error, OperationType.DELETE, path, false);
     }
   }
 
@@ -291,7 +303,7 @@ class FirestoreService {
     try {
       await setDoc(doc(db, 'products', product.id), cleanForFirestore(product), { merge: true });
     } catch (error) {
-      handleFirestoreError(error, OperationType.WRITE, path);
+      handleFirestoreError(error, OperationType.WRITE, path, false);
     }
   }
 
@@ -300,7 +312,7 @@ class FirestoreService {
     try {
       await deleteDoc(doc(db, 'products', productId));
     } catch (error) {
-      handleFirestoreError(error, OperationType.DELETE, path);
+      handleFirestoreError(error, OperationType.DELETE, path, false);
     }
   }
 
@@ -309,7 +321,7 @@ class FirestoreService {
     try {
       await setDoc(doc(db, 'categories', category.id), cleanForFirestore(category), { merge: true });
     } catch (error) {
-      handleFirestoreError(error, OperationType.WRITE, path);
+      handleFirestoreError(error, OperationType.WRITE, path, false);
     }
   }
 
@@ -318,7 +330,7 @@ class FirestoreService {
     try {
       await deleteDoc(doc(db, 'categories', categoryId));
     } catch (error) {
-      handleFirestoreError(error, OperationType.DELETE, path);
+      handleFirestoreError(error, OperationType.DELETE, path, false);
     }
   }
 
@@ -327,7 +339,7 @@ class FirestoreService {
     try {
       await setDoc(doc(db, 'sellers', seller.id), cleanForFirestore(seller), { merge: true });
     } catch (error) {
-      handleFirestoreError(error, OperationType.WRITE, path);
+      handleFirestoreError(error, OperationType.WRITE, path, false);
     }
   }
 
@@ -336,7 +348,7 @@ class FirestoreService {
     try {
       await deleteDoc(doc(db, 'sellers', sellerId));
     } catch (error) {
-      handleFirestoreError(error, OperationType.DELETE, path);
+      handleFirestoreError(error, OperationType.DELETE, path, false);
     }
   }
 
@@ -345,7 +357,7 @@ class FirestoreService {
     try {
       await setDoc(doc(db, 'orders', order.id), cleanForFirestore(order), { merge: true });
     } catch (error) {
-      handleFirestoreError(error, OperationType.WRITE, path);
+      handleFirestoreError(error, OperationType.WRITE, path, false);
     }
   }
 }

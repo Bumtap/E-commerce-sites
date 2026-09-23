@@ -138,7 +138,7 @@ export const SellerPortalModal: React.FC = () => {
 
   if (!isSellerPortalOpen) return null;
 
-  const handleInnerAddSellerSubmit = (e: React.FormEvent) => {
+  const handleInnerAddSellerSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setInnerError('');
     if (!innerStoreName.trim() || !innerOwnerName.trim() || !innerEmail.trim() || !innerPassword.trim()) {
@@ -146,7 +146,7 @@ export const SellerPortalModal: React.FC = () => {
       return;
     }
     if (innerSwitchImmediate) {
-      const res = sellerRegister({
+      const res = await sellerRegister({
         storeName: innerStoreName.trim(),
         ownerName: innerOwnerName.trim(),
         email: innerEmail.trim(),
@@ -171,7 +171,7 @@ export const SellerPortalModal: React.FC = () => {
         setInnerError(res.message);
       }
     } else {
-      const res = addSellerByAdmin({
+      const res = await addSellerByAdmin({
         storeName: innerStoreName.trim(),
         ownerName: innerOwnerName.trim(),
         email: innerEmail.trim(),
@@ -219,7 +219,7 @@ export const SellerPortalModal: React.FC = () => {
   };
 
   // Handle Registration submission
-  const handleRegisterSubmit = (e: React.FormEvent) => {
+  const handleRegisterSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setRegError('');
     if (!regStoreName.trim() || !regOwnerName.trim() || !regEmail.trim() || !regPassword.trim()) {
@@ -230,7 +230,7 @@ export const SellerPortalModal: React.FC = () => {
       setRegError('Password must be at least 4 characters');
       return;
     }
-    const res = sellerRegister({
+    const res = await sellerRegister({
       storeName: regStoreName.trim(),
       ownerName: regOwnerName.trim(),
       email: regEmail.trim(),
