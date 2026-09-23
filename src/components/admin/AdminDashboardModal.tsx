@@ -4,6 +4,7 @@ import { formatNu, formatDateTime } from '../../utils/format';
 import { formatWhatsAppUrl } from '../../utils/whatsapp';
 import { Product, Store, Category, Coupon, DeliveryZone } from '../../types';
 import { ImageUpload } from '../common/ImageUpload';
+import { GOOGLE_APPS_SCRIPT_CODE } from '../../data/googleAppsScriptCode';
 import {
   X,
   LayoutDashboard,
@@ -41,7 +42,12 @@ import {
   Heart,
   Gem,
   Check,
-  AlertTriangle
+  AlertTriangle,
+  FileSpreadsheet,
+  ExternalLink,
+  Copy,
+  RefreshCw,
+  Download,
 } from 'lucide-react';
 
 const CATEGORY_IMAGE_PRESETS = [
@@ -123,11 +129,85 @@ export const AdminDashboardModal: React.FC = () => {
     addSellerByAdmin,
     deleteSellerByAdmin,
     deleteStoreByAdmin,
+    googleSheetsUrl,
+    isGoogleSheetsConnected,
+    saveGoogleSheetsUrl,
+    testGoogleSheetsConnection,
+    syncAllToGoogleSheets,
+    fetchFromGoogleSheets,
   } = useShop();
 
   const [activeTab, setActiveTab] = useState<
-    'overview' | 'products' | 'stores' | 'categories' | 'coupons' | 'zones' | 'security'
+    'overview' | 'products' | 'stores' | 'categories' | 'coupons' | 'zones' | 'sheets' | 'security'
   >('overview');
+
+  // Google Sheets integration state
+  const [sheetUrlInput, setSheetUrlInput] = useState(googleSheetsUrl || '');
+  const [isTestingSheet, setIsTestingSheet] = useState(false);
+  const [isSavingSheet, setIsSavingSheet] = useState(false);
+  const [isSyncingSheet, setIsSyncingSheet] = useState(false);
+  const [isFetchingSheet, setIsFetchingSheet] = useState(false);
+  const [copiedScript, setCopiedScript] = useState(false);
+  const [sheetTestResult, setSheetTestResult] = useState<{ success: boolean; message: string } | null>(null);
+
+  const handleCopyScript = () => {
+    navigator.clipboard.writeText(GOOGLE_APPS_SCRIPT_CODE);
+    setCopiedScript(true);
+    showToast('Google Apps Script code copied to clipboard!', 'success');
+    setTimeout(() => setCopiedScript(false), 3000);
+  };
+
+  const handleDownloadScript = () => {
+    const blob = new Blob([GOOGLE_APPS_SCRIPT_CODE], { type: 'text/javascript' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'Code.gs';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    showToast('Downloaded Code.gs script file', 'info');
+  };
+
+  const handleTestSheet = async () => {
+    if (!sheetUrlInput.trim()) {
+      showToast('Please enter your Google Apps Script Web App URL first', 'error');
+      return;
+    }
+    setIsTestingSheet(true);
+    setSheetTestResult(null);
+    const res = await testGoogleSheetsConnection(sheetUrlInput.trim());
+    setSheetTestResult(res);
+    setIsTestingSheet(false);
+  };
+
+  const handleSaveSheetUrl = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsSavingSheet(true);
+    setSheetTestResult(null);
+    const res = await saveGoogleSheetsUrl(sheetUrlInput.trim());
+    setSheetTestResult(res);
+    setIsSavingSheet(false);
+  };
+
+  const handleSyncAllToSheet = async () => {
+    if (!isGoogleSheetsConnected && !sheetUrlInput.trim()) {
+      showToast('Configure and connect your Google Sheet URL before syncing', 'error');
+      return;
+    }
+    setIsSyncingSheet(true);
+    const res = await syncAllToGoogleSheets();
+    setSheetTestResult(res);
+    setIsSyncingSheet(false);
+  };
+
+  const handleFetchFromSheet = async () => {
+    setIsFetchingSheet(true);
+    const res = await fetchFromGoogleSheets();
+    setSheetTestResult(res);
+    setIsFetchingSheet(false);
+  };
 
   // Admin login gate states
   const [adminPasswordInput, setAdminPasswordInput] = useState('');
@@ -530,6 +610,11 @@ export const AdminDashboardModal: React.FC = () => {
             { id: 'categories', label: `Categories (${categories.length})`, icon: <Layers className="w-4 h-4" /> },
             { id: 'coupons', label: `Vouchers (${coupons.length})`, icon: <Tag className="w-4 h-4" /> },
             { id: 'zones', label: 'Delivery Zones', icon: <Truck className="w-4 h-4" /> },
+            {
+              id: 'sheets',
+              label: isGoogleSheetsConnected ? 'Google Sheets (Live)' : 'Google Sheets DB',
+              icon: <FileSpreadsheet className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+            },
             { id: 'security', label: 'Security & Access', icon: <Key className="w-4 h-4" /> },
           ].map((tab) => (
             <button
@@ -1019,6 +1104,239 @@ export const AdminDashboardModal: React.FC = () => {
                     </span>
                   </div>
                 ))}
+              </div>
+            </div>
+          )}
+
+          {/* GOOGLE SHEETS DB TAB */}
+          {activeTab === 'sheets' && (
+            <div className="space-y-6 max-w-4xl">
+              {/* Status Header Banner */}
+              <div className="p-5 rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-850 shadow-xs">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                  <div className="flex items-start gap-3.5">
+                    <div className="w-12 h-12 rounded-2xl bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800 flex items-center justify-center text-emerald-600 dark:text-emerald-400 shrink-0">
+                      <FileSpreadsheet className="w-6 h-6" />
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <h4 className="font-bold text-base text-slate-900 dark:text-white">
+                          Google Sheets Database Integration
+                        </h4>
+                        <span
+                          className={`text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider ${
+                            isGoogleSheetsConnected
+                              ? 'bg-emerald-100 dark:bg-emerald-900/60 text-emerald-800 dark:text-emerald-200 border border-emerald-300 dark:border-emerald-700'
+                              : 'bg-amber-100 dark:bg-amber-900/60 text-amber-800 dark:text-amber-200 border border-amber-300 dark:border-amber-700'
+                          }`}
+                        >
+                          {isGoogleSheetsConnected ? '● Connected' : '○ Not Configured'}
+                        </span>
+                      </div>
+                      <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 leading-relaxed">
+                        100% Free database using your personal Google Spreadsheet. No Firebase billing or credit card required. Stores, products, sellers, and orders sync directly to your spreadsheet tabs in real-time.
+                      </p>
+                    </div>
+                  </div>
+
+                  <a
+                    href="https://sheets.new"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 font-bold text-xs transition-colors shrink-0 cursor-pointer"
+                  >
+                    <span>Create New Sheet</span>
+                    <ExternalLink className="w-3.5 h-3.5" />
+                  </a>
+                </div>
+              </div>
+
+              {/* Endpoint Connection Form */}
+              <div className="p-5 rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-850 space-y-4">
+                <h5 className="font-bold text-sm text-slate-900 dark:text-white flex items-center gap-2">
+                  <span>1. Connect Google Apps Script Web App</span>
+                </h5>
+                <p className="text-xs text-slate-500 dark:text-slate-400">
+                  Deploy the provided script in your Google Sheet as a Web App (Access: <strong>Anyone</strong>) and paste the resulting URL here.
+                </p>
+
+                <form onSubmit={handleSaveSheetUrl} className="space-y-3">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                      Web App Executable URL
+                    </label>
+                    <div className="flex flex-col sm:flex-row gap-2">
+                      <input
+                        type="url"
+                        required
+                        value={sheetUrlInput}
+                        onChange={(e) => {
+                          setSheetUrlInput(e.target.value);
+                          setSheetTestResult(null);
+                        }}
+                        placeholder="https://script.google.com/macros/s/AKfycb.../exec"
+                        className="flex-1 px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white font-mono text-xs focus:ring-2 focus:ring-teal-700 outline-hidden"
+                      />
+                      <div className="flex gap-2">
+                        <button
+                          type="button"
+                          onClick={handleTestSheet}
+                          disabled={isTestingSheet || !sheetUrlInput.trim()}
+                          className="px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 font-bold text-xs hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors disabled:opacity-50 cursor-pointer flex items-center gap-1.5"
+                        >
+                          <RefreshCw className={`w-3.5 h-3.5 ${isTestingSheet ? 'animate-spin' : ''}`} />
+                          <span>{isTestingSheet ? 'Testing...' : 'Test Connection'}</span>
+                        </button>
+                        <button
+                          type="submit"
+                          disabled={isSavingSheet}
+                          className="px-4 py-2.5 rounded-xl bg-teal-800 hover:bg-teal-900 text-white font-bold text-xs shadow-xs transition-colors disabled:opacity-50 cursor-pointer flex items-center gap-1.5"
+                        >
+                          <Check className="w-4 h-4" />
+                          <span>{isSavingSheet ? 'Connecting...' : 'Save & Connect'}</span>
+                        </button>
+                        {isGoogleSheetsConnected && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setSheetUrlInput('');
+                              saveGoogleSheetsUrl('');
+                            }}
+                            className="px-3 py-2.5 rounded-xl border border-rose-200 dark:border-rose-900/60 text-rose-600 dark:text-rose-400 font-bold text-xs hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors cursor-pointer"
+                            title="Disconnect Google Sheet"
+                          >
+                            Disconnect
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  {sheetTestResult && (
+                    <div
+                      className={`p-3 rounded-xl border text-xs flex items-center gap-2 ${
+                        sheetTestResult.success
+                          ? 'bg-emerald-50 dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-200'
+                          : 'bg-rose-50 dark:bg-rose-950/40 border-rose-200 dark:border-rose-900/50 text-rose-700 dark:text-rose-300'
+                      }`}
+                    >
+                      {sheetTestResult.success ? (
+                        <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                      ) : (
+                        <AlertTriangle className="w-4 h-4 text-rose-500 shrink-0" />
+                      )}
+                      <span>{sheetTestResult.message}</span>
+                    </div>
+                  )}
+                </form>
+
+                {/* Database Actions */}
+                <div className="pt-2 border-t border-slate-100 dark:border-slate-800 flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={handleSyncAllToSheet}
+                    disabled={isSyncingSheet || !isGoogleSheetsConnected}
+                    className="px-3.5 py-2 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs shadow-xs transition-colors disabled:opacity-40 cursor-pointer flex items-center gap-1.5"
+                  >
+                    <RefreshCw className={`w-3.5 h-3.5 ${isSyncingSheet ? 'animate-spin' : ''}`} />
+                    <span>{isSyncingSheet ? 'Pushing Data...' : 'Push All Data to Google Sheet (Stores, Products, Sellers)'}</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={handleFetchFromSheet}
+                    disabled={isFetchingSheet || !isGoogleSheetsConnected}
+                    className="px-3.5 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 font-bold text-xs transition-colors disabled:opacity-40 cursor-pointer flex items-center gap-1.5"
+                  >
+                    <Download className={`w-3.5 h-3.5 ${isFetchingSheet ? 'animate-spin' : ''}`} />
+                    <span>{isFetchingSheet ? 'Pulling...' : 'Pull Live Data from Sheet'}</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Ready-to-copy Google Apps Script Code */}
+              <div className="p-5 rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-850 space-y-3">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                  <div>
+                    <h5 className="font-bold text-sm text-slate-900 dark:text-white flex items-center gap-2">
+                      <span>2. Google Apps Script Backend Code (`Code.gs`)</span>
+                    </h5>
+                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                      Copy and paste this script into <strong>Extensions &gt; Apps Script</strong> in your Google Sheet.
+                    </p>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={handleCopyScript}
+                      className="px-3 py-1.5 rounded-xl bg-teal-800 hover:bg-teal-900 text-white font-bold text-xs transition-colors flex items-center gap-1.5 cursor-pointer shadow-xs"
+                    >
+                      {copiedScript ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+                      <span>{copiedScript ? 'Copied to Clipboard!' : 'Copy Script Code'}</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleDownloadScript}
+                      className="px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 font-bold text-xs transition-colors flex items-center gap-1.5 cursor-pointer"
+                    >
+                      <Download className="w-3.5 h-3.5" />
+                      <span>Download .gs</span>
+                    </button>
+                  </div>
+                </div>
+
+                <div className="relative">
+                  <pre className="p-4 rounded-xl bg-slate-900 text-slate-200 font-mono text-[11px] leading-relaxed max-h-64 overflow-y-auto border border-slate-800 scrollbar-thin">
+                    <code>{GOOGLE_APPS_SCRIPT_CODE}</code>
+                  </pre>
+                </div>
+              </div>
+
+              {/* Step-by-Step 2-Minute Deployment Guide */}
+              <div className="p-5 rounded-2xl border border-teal-200 dark:border-teal-800/60 bg-teal-50/50 dark:bg-teal-950/20 space-y-3">
+                <h5 className="font-bold text-sm text-teal-950 dark:text-teal-200 flex items-center gap-2">
+                  <span>📋 2-Minute Deployment Instructions</span>
+                </h5>
+                <ol className="list-decimal list-inside space-y-2 text-xs text-slate-700 dark:text-slate-300 leading-relaxed font-medium">
+                  <li>
+                    Create a blank Google Spreadsheet at{' '}
+                    <a
+                      href="https://sheets.new"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-teal-700 dark:text-teal-400 font-bold underline inline-flex items-center gap-0.5"
+                    >
+                      sheets.new <ExternalLink className="w-3 h-3" />
+                    </a>{' '}
+                    and name it <em>&quot;GMC Marketplace Database&quot;</em>.
+                  </li>
+                  <li>
+                    In the spreadsheet menu, click <strong>Extensions &gt; Apps Script</strong>.
+                  </li>
+                  <li>
+                    Erase any existing code in the editor, paste the copied script above, and click the <strong>Save</strong> floppy icon.
+                  </li>
+                  <li>
+                    Click the blue <strong>Deploy</strong> button (top right) &gt; <strong>New deployment</strong>.
+                  </li>
+                  <li>
+                    Click the gear icon next to <em>Select type</em> &gt; choose <strong>Web app</strong>.
+                  </li>
+                  <li>
+                    Configure:
+                    <ul className="list-disc list-inside ml-4 mt-1 space-y-0.5 text-slate-600 dark:text-slate-400">
+                      <li><strong>Execute as:</strong> Me (your email)</li>
+                      <li><strong>Who has access:</strong> <span className="text-emerald-700 dark:text-emerald-400 font-bold">Anyone</span> (ensures marketplace visitors and buyers can access the live database)</li>
+                    </ul>
+                  </li>
+                  <li>
+                    Click <strong>Deploy</strong>, grant permissions when prompted, and copy the <strong>Web app URL</strong> (ends in <code>/exec</code>).
+                  </li>
+                  <li>
+                    Paste the Web app URL in the input above, click <strong>Save &amp; Connect</strong>, then click <strong>Push All Data</strong> to populate your spreadsheet automatically!
+                  </li>
+                </ol>
               </div>
             </div>
           )}

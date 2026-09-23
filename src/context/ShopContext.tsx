@@ -19,6 +19,7 @@ import {
 import { storageService, DEFAULT_USER } from '../services/storageService';
 import { supabaseService } from '../services/supabaseService';
 import { firestoreService } from '../services/firestoreService';
+import { googleSheetsService, SheetsSyncResult } from '../services/googleSheetsService';
 
 // Utility helper to merge cloud arrays with local arrays without losing newly added items
 const mergeById = <T extends { id: string }>(primary: T[], fallback: T[]): T[] => {
@@ -180,6 +181,14 @@ interface ShopContextType {
   isDarkMode: boolean;
   toggleDarkMode: () => void;
   setDarkMode: (val: boolean) => void;
+
+  // Google Sheets Integration
+  googleSheetsUrl: string;
+  isGoogleSheetsConnected: boolean;
+  saveGoogleSheetsUrl: (url: string) => Promise<SheetsSyncResult>;
+  testGoogleSheetsConnection: (testUrl?: string) => Promise<SheetsSyncResult>;
+  syncAllToGoogleSheets: () => Promise<SheetsSyncResult>;
+  fetchFromGoogleSheets: () => Promise<{ success: boolean; message: string }>;
 
   // Notifications
   toasts: ToastInfo[];
@@ -361,6 +370,43 @@ export const ShopProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           const mergedOrders = mergeById(cloudOrders, storageService.getOrders());
           setOrders(mergedOrders);
           storageService.setOrders(mergedOrders);
+        }
+
+        // Hydrate from Google Sheets if configured
+        if (googleSheetsService.isConfigured()) {
+          try {
+            const sheetsData = await googleSheetsService.fetchAll();
+            if (sheetsData.stores && sheetsData.stores.length > 0) {
+              setStores((prev) => {
+                const merged = mergeById(sheetsData.stores!, prev);
+                storageService.setStores(merged);
+                return merged;
+              });
+            }
+            if (sheetsData.products && sheetsData.products.length > 0) {
+              setProducts((prev) => {
+                const merged = mergeById(sheetsData.products!, prev);
+                storageService.setProducts(merged);
+                return merged;
+              });
+            }
+            if (sheetsData.sellers && sheetsData.sellers.length > 0) {
+              setSellers((prev) => {
+                const merged = mergeById(sheetsData.sellers!, prev);
+                storageService.setSellers(merged);
+                return merged;
+              });
+            }
+            if (sheetsData.categories && sheetsData.categories.length > 0) {
+              setCategories((prev) => {
+                const merged = mergeById(sheetsData.categories!, prev);
+                storageService.setCategories(merged);
+                return merged;
+              });
+            }
+          } catch (e) {
+            console.warn('Google Sheets background sync note:', e);
+          }
         }
       } catch (e) {
         console.warn('Initial cloud hydration note:', e);
@@ -626,6 +672,10 @@ export const ShopProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       } catch (err) {
         console.warn('Firestore sync note on seller registration:', err);
       }
+      if (googleSheetsService.isConfigured()) {
+        googleSheetsService.saveStore(res.store);
+        googleSheetsService.saveSeller(res.seller);
+      }
       supabaseService.saveStore(res.store);
       supabaseService.saveSeller(res.seller);
       setSellers(storageService.getSellers());
@@ -673,6 +723,10 @@ export const ShopProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       } catch (err) {
         console.warn('Firestore sync note on admin seller onboarding:', err);
       }
+      if (googleSheetsService.isConfigured()) {
+        googleSheetsService.saveStore(res.store);
+        googleSheetsService.saveSeller(res.seller);
+      }
       supabaseService.saveStore(res.store);
       supabaseService.saveSeller(res.seller);
       setSellers(storageService.getSellers());
@@ -693,9 +747,15 @@ export const ShopProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     if (seller?.storeId) {
       firestoreService.deleteStore(seller.storeId);
       supabaseService.deleteStore(seller.storeId);
+      if (googleSheetsService.isConfigured()) {
+        googleSheetsService.deleteStore(seller.storeId);
+      }
     }
     firestoreService.deleteSeller(sellerId);
     supabaseService.deleteSeller(sellerId);
+    if (googleSheetsService.isConfigured()) {
+      googleSheetsService.deleteSeller(sellerId);
+    }
     const res = storageService.deleteSeller(sellerId);
     if (res.success) {
       setSellers(storageService.getSellers());
@@ -713,6 +773,9 @@ export const ShopProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }
     firestoreService.deleteStore(storeId);
     supabaseService.deleteStore(storeId);
+    if (googleSheetsService.isConfigured()) {
+      googleSheetsService.deleteStore(storeId);
+    }
     const res = storageService.deleteStore(storeId);
     if (res.success) {
       setStores(storageService.getStores());
@@ -796,6 +859,9 @@ export const ShopProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     storageService.saveOrder(newOrder);
     firestoreService.saveOrder(newOrder);
     supabaseService.saveOrder(newOrder);
+    if (googleSheetsService.isConfigured()) {
+      googleSheetsService.saveOrder(newOrder);
+    }
 
     // Reduce stock and log transaction
     newOrder.items.forEach((item) => {
@@ -843,6 +909,9 @@ export const ShopProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     if (updated) {
       firestoreService.saveOrder(updated);
       supabaseService.saveOrder(updated);
+      if (googleSheetsService.isConfigured()) {
+        googleSheetsService.saveOrder(updated);
+      }
       setOrders(storageService.getOrders());
       if (trackingOrder?.id === orderId) {
         setTrackingOrder(updated);
@@ -876,6 +945,9 @@ export const ShopProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     storageService.saveProduct(newProduct);
     firestoreService.saveProduct(newProduct);
     supabaseService.saveProduct(newProduct);
+    if (googleSheetsService.isConfigured()) {
+      googleSheetsService.saveProduct(newProduct);
+    }
     setProducts(storageService.getProducts());
     showToast(`Product "${newProduct.name}" listed under ${targetSellerName}`, 'success');
     return newProduct;
@@ -906,6 +978,9 @@ export const ShopProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     storageService.saveProduct(target);
     firestoreService.saveProduct(target);
     supabaseService.saveProduct(target);
+    if (googleSheetsService.isConfigured()) {
+      googleSheetsService.saveProduct(target);
+    }
     setProducts(storageService.getProducts());
     showToast(`Product "${target.name}" updated`, 'success');
   };
@@ -929,6 +1004,9 @@ export const ShopProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     storageService.deleteProduct(productId);
     firestoreService.deleteProduct(productId);
     supabaseService.deleteProduct(productId);
+    if (googleSheetsService.isConfigured()) {
+      googleSheetsService.deleteProduct(productId);
+    }
     setProducts(storageService.getProducts());
     showToast('Product deleted', 'info');
   };
@@ -979,6 +1057,9 @@ export const ShopProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     storageService.saveCategory(newCategory);
     firestoreService.saveCategory(newCategory);
     supabaseService.saveCategory(newCategory);
+    if (googleSheetsService.isConfigured()) {
+      googleSheetsService.saveCategory(newCategory);
+    }
     setCategories(storageService.getCategories());
     showToast(`Category "${newCategory.name}" added successfully`, 'success');
     return { success: true, message: 'Category added successfully', category: newCategory };
@@ -996,6 +1077,9 @@ export const ShopProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     storageService.saveCategory(category);
     firestoreService.saveCategory(category);
     supabaseService.saveCategory(category);
+    if (googleSheetsService.isConfigured()) {
+      googleSheetsService.saveCategory(category);
+    }
     setCategories(storageService.getCategories());
 
     // If category name changed, synchronize associated products
@@ -1029,6 +1113,9 @@ export const ShopProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     storageService.deleteCategory(categoryId);
     firestoreService.deleteCategory(categoryId);
     supabaseService.deleteCategory(categoryId);
+    if (googleSheetsService.isConfigured()) {
+      googleSheetsService.deleteCategory(categoryId);
+    }
     setCategories(storageService.getCategories());
     showToast('Category deleted', 'info');
   };
@@ -1054,8 +1141,128 @@ export const ShopProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     storageService.saveStore(target);
     firestoreService.saveStore(target);
     supabaseService.saveStore(target);
+    if (googleSheetsService.isConfigured()) {
+      googleSheetsService.saveStore(target);
+    }
     setStores(storageService.getStores());
     showToast(`Store "${target.name}" updated`, 'success');
+  };
+
+  // Google Sheets Integration State and Methods
+  const [googleSheetsUrl, setGoogleSheetsUrl] = useState<string>(() => googleSheetsService.getSavedUrl());
+  const [isGoogleSheetsConnected, setIsGoogleSheetsConnected] = useState<boolean>(() => googleSheetsService.isConfigured());
+
+  const saveGoogleSheetsUrl = async (url: string): Promise<SheetsSyncResult> => {
+    googleSheetsService.setSavedUrl(url);
+    setGoogleSheetsUrl(url);
+    if (!url.trim()) {
+      setIsGoogleSheetsConnected(false);
+      showToast('Google Sheets URL cleared', 'info');
+      return { success: true, message: 'Google Sheets URL cleared' };
+    }
+    const testRes = await googleSheetsService.testConnection(url);
+    setIsGoogleSheetsConnected(testRes.success);
+    if (testRes.success) {
+      showToast('Google Sheets connected successfully!', 'success');
+      // Auto-fetch data from the sheet if any
+      const data = await googleSheetsService.fetchAll();
+      if (data.stores && data.stores.length > 0) {
+        setStores((prev) => {
+          const merged = mergeById(data.stores!, prev);
+          storageService.setStores(merged);
+          return merged;
+        });
+      }
+      if (data.products && data.products.length > 0) {
+        setProducts((prev) => {
+          const merged = mergeById(data.products!, prev);
+          storageService.setProducts(merged);
+          return merged;
+        });
+      }
+      if (data.sellers && data.sellers.length > 0) {
+        setSellers((prev) => {
+          const merged = mergeById(data.sellers!, prev);
+          storageService.setSellers(merged);
+          return merged;
+        });
+      }
+      if (data.categories && data.categories.length > 0) {
+        setCategories((prev) => {
+          const merged = mergeById(data.categories!, prev);
+          storageService.setCategories(merged);
+          return merged;
+        });
+      }
+    } else {
+      showToast(testRes.message, 'error');
+    }
+    return testRes;
+  };
+
+  const testGoogleSheetsConnection = async (testUrl?: string): Promise<SheetsSyncResult> => {
+    return googleSheetsService.testConnection(testUrl);
+  };
+
+  const syncAllToGoogleSheets = async (): Promise<SheetsSyncResult> => {
+    const res = await googleSheetsService.syncAllToSheet({
+      stores: storageService.getStores(),
+      products: storageService.getProducts(),
+      sellers: storageService.getSellers(),
+      categories: storageService.getCategories(),
+    });
+    if (res.success) {
+      showToast('Marketplace data synced to Google Sheets!', 'success');
+    } else {
+      showToast(res.message, 'error');
+    }
+    return res;
+  };
+
+  const fetchFromGoogleSheets = async (): Promise<{ success: boolean; message: string }> => {
+    if (!googleSheetsService.isConfigured()) {
+      return { success: false, message: 'Google Sheets URL not configured.' };
+    }
+    try {
+      const data = await googleSheetsService.fetchAll();
+      let count = 0;
+      if (data.stores && data.stores.length > 0) {
+        setStores((prev) => {
+          const merged = mergeById(data.stores!, prev);
+          storageService.setStores(merged);
+          return merged;
+        });
+        count += data.stores.length;
+      }
+      if (data.products && data.products.length > 0) {
+        setProducts((prev) => {
+          const merged = mergeById(data.products!, prev);
+          storageService.setProducts(merged);
+          return merged;
+        });
+        count += data.products.length;
+      }
+      if (data.sellers && data.sellers.length > 0) {
+        setSellers((prev) => {
+          const merged = mergeById(data.sellers!, prev);
+          storageService.setSellers(merged);
+          return merged;
+        });
+        count += data.sellers.length;
+      }
+      if (data.categories && data.categories.length > 0) {
+        setCategories((prev) => {
+          const merged = mergeById(data.categories!, prev);
+          storageService.setCategories(merged);
+          return merged;
+        });
+      }
+      showToast(`Loaded live records from Google Sheets!`, 'success');
+      return { success: true, message: `Loaded ${count} records from Google Sheets.` };
+    } catch (err: any) {
+      showToast('Failed to pull from Google Sheets: ' + err.message, 'error');
+      return { success: false, message: err.message };
+    }
   };
 
   const removeFromWishlist = (productId: string) => {
@@ -1192,6 +1399,12 @@ export const ShopProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         isDarkMode,
         toggleDarkMode,
         setDarkMode,
+        googleSheetsUrl,
+        isGoogleSheetsConnected,
+        saveGoogleSheetsUrl,
+        testGoogleSheetsConnection,
+        syncAllToGoogleSheets,
+        fetchFromGoogleSheets,
         toasts,
         showToast,
         removeToast,
