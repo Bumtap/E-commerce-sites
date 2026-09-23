@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useShop } from '../../context/ShopContext';
 import { formatNu, formatDateTime } from '../../utils/format';
 import { formatWhatsAppUrl } from '../../utils/whatsapp';
-import { Product, Store, Category, Coupon, DeliveryZone } from '../../types';
+import { Product, Store, Category, Coupon, DeliveryZone, SellerAccount } from '../../types';
 import { ImageUpload } from '../common/ImageUpload';
 import { GOOGLE_APPS_SCRIPT_CODE } from '../../data/googleAppsScriptCode';
 import {
@@ -61,6 +61,29 @@ const CATEGORY_IMAGE_PRESETS = [
   { name: 'Eco-Living & Home', url: 'https://images.unsplash.com/photo-1513694203232-719a280e022f?w=500&auto=format&fit=crop&q=80' },
 ];
 
+const STORE_LOGO_PRESETS = [
+  { name: 'Heritage Seal', url: 'https://images.unsplash.com/photo-1544717302-de2939b7ef71?w=200&auto=format&fit=crop&q=80' },
+  { name: 'Organic Harvest', url: 'https://images.unsplash.com/photo-1615485500704-8e990f9900f7?w=200&auto=format&fit=crop&q=80' },
+  { name: 'Weaving Emblem', url: 'https://images.unsplash.com/photo-1606760227091-3dd870d97f1d?w=200&auto=format&fit=crop&q=80' },
+  { name: 'Himalayan Bee', url: 'https://images.unsplash.com/photo-1587049352846-4a222e784d38?w=200&auto=format&fit=crop&q=80' },
+];
+
+const STORE_COVER_PRESETS = [
+  { name: 'GMC Terraces', url: 'https://images.unsplash.com/photo-1500937386664-56d1dfef3854?w=1200&auto=format&fit=crop&q=80' },
+  { name: 'Himalayan Mist', url: 'https://images.unsplash.com/photo-1464822759023-fed622ff2c3b?w=1200&auto=format&fit=crop&q=80' },
+  { name: 'Traditional Loom', url: 'https://images.unsplash.com/photo-1528458909336-e7a0adfed0a5?w=1200&auto=format&fit=crop&q=80' },
+  { name: 'Zen Architecture', url: 'https://images.unsplash.com/photo-1513694203232-719a280e022f?w=1200&auto=format&fit=crop&q=80' },
+];
+
+const PRODUCT_IMAGE_PRESETS = [
+  { name: 'Bhutan Red Rice', url: 'https://images.unsplash.com/photo-1586201375761-83865001e31c?w=600&auto=format&fit=crop&q=80' },
+  { name: 'Organic Honey', url: 'https://images.unsplash.com/photo-1587049352846-4a222e784d38?w=600&auto=format&fit=crop&q=80' },
+  { name: 'Herbal Tea', url: 'https://images.unsplash.com/photo-1576092768241-dec231879fc3?w=600&auto=format&fit=crop&q=80' },
+  { name: 'Yak Wool Scarf', url: 'https://images.unsplash.com/photo-1608256246200-53e635b5b65f?w=600&auto=format&fit=crop&q=80' },
+  { name: 'Cordyceps Wellness', url: 'https://images.unsplash.com/photo-1584308666744-24d5c474f2ae?w=600&auto=format&fit=crop&q=80' },
+  { name: 'Carved Wood Art', url: 'https://images.unsplash.com/photo-1590736969955-71cc94801759?w=600&auto=format&fit=crop&q=80' },
+];
+
 const CATEGORY_ICON_OPTIONS = [
   { id: 'ShoppingBag', label: 'Shopping Bag' },
   { id: 'Apple', label: 'Fresh Produce' },
@@ -109,6 +132,7 @@ export const AdminDashboardModal: React.FC = () => {
     isAdminPortalOpen,
     setIsAdminPortalOpen,
     products,
+    addProduct,
     updateProduct,
     deleteProduct,
     stores,
@@ -127,6 +151,7 @@ export const AdminDashboardModal: React.FC = () => {
     changeAdminPassword,
     sellers,
     addSellerByAdmin,
+    updateSellerByAdmin,
     deleteSellerByAdmin,
     deleteStoreByAdmin,
     googleSheetsUrl,
@@ -214,8 +239,183 @@ export const AdminDashboardModal: React.FC = () => {
   const [showPassword, setShowPassword] = useState(false);
   const [loginError, setLoginError] = useState('');
 
-  // Add Seller Provisioning Modal State
-  const [showAddSellerModal, setShowAddSellerModal] = useState(false);
+  // Product Management (Admin Add & Edit)
+  const [showProductModal, setShowProductModal] = useState(false);
+  const [editingProduct, setEditingProduct] = useState<Product | null>(null);
+  const [productSearch, setProductSearch] = useState('');
+  const [productCategoryFilter, setProductCategoryFilter] = useState('all');
+  const [productSellerFilter, setProductSellerFilter] = useState('all');
+  const [productFormError, setProductFormError] = useState('');
+  const [productFormData, setProductFormData] = useState({
+    name: '',
+    sellerId: '',
+    category: '',
+    price: 450,
+    salePrice: '' as string | number,
+    stock: 25,
+    unit: 'piece',
+    origin: 'GMC Organic Zone, Gelephu',
+    shortDescription: '',
+    description: '',
+    imageUrl: PRODUCT_IMAGE_PRESETS[0].url,
+    isOrganic: true,
+    isMadeInBhutan: true,
+    isGmcExclusive: false,
+    isFeatured: false,
+    isFlashDeal: false,
+  });
+
+  const handleOpenAddProduct = () => {
+    setEditingProduct(null);
+    setProductFormError('');
+    const defaultSellerId = stores[0]?.id || (sellers[0]?.storeId || '');
+    const defaultCategory = categories[0]?.name || 'Groceries & Bhutanese Staples';
+    setProductFormData({
+      name: '',
+      sellerId: defaultSellerId,
+      category: defaultCategory,
+      price: 450,
+      salePrice: '',
+      stock: 25,
+      unit: 'piece',
+      origin: 'GMC Organic Zone, Gelephu',
+      shortDescription: '',
+      description: '',
+      imageUrl: PRODUCT_IMAGE_PRESETS[0].url,
+      isOrganic: true,
+      isMadeInBhutan: true,
+      isGmcExclusive: false,
+      isFeatured: false,
+      isFlashDeal: false,
+    });
+    setShowProductModal(true);
+  };
+
+  const handleOpenEditProduct = (prod: Product) => {
+    setEditingProduct(prod);
+    setProductFormError('');
+    setProductFormData({
+      name: prod.name,
+      sellerId: prod.sellerId,
+      category: prod.category,
+      price: prod.price,
+      salePrice: prod.salePrice !== undefined && prod.salePrice !== null ? prod.salePrice : '',
+      stock: prod.stock,
+      unit: prod.unit || 'piece',
+      origin: prod.origin || 'GMC Organic Zone, Gelephu',
+      shortDescription: prod.shortDescription || '',
+      description: prod.description || '',
+      imageUrl: prod.images?.[0] || PRODUCT_IMAGE_PRESETS[0].url,
+      isOrganic: prod.isOrganic ?? true,
+      isMadeInBhutan: prod.isMadeInBhutan ?? true,
+      isGmcExclusive: prod.isGmcExclusive ?? false,
+      isFeatured: prod.isFeatured ?? false,
+      isFlashDeal: prod.isFlashDeal ?? false,
+    });
+    setShowProductModal(true);
+  };
+
+  const handleSaveProductSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    setProductFormError('');
+    const trimmedName = productFormData.name.trim();
+    if (!trimmedName) {
+      setProductFormError('Please enter a product title');
+      return;
+    }
+    const priceNum = Number(productFormData.price);
+    if (isNaN(priceNum) || priceNum <= 0) {
+      setProductFormError('Regular price must be greater than Nu. 0');
+      return;
+    }
+    const salePriceNum =
+      productFormData.salePrice !== '' && productFormData.salePrice !== undefined
+        ? Number(productFormData.salePrice)
+        : undefined;
+    if (salePriceNum !== undefined && (isNaN(salePriceNum) || salePriceNum < 0)) {
+      setProductFormError('Sale price must be a valid number');
+      return;
+    }
+    if (salePriceNum !== undefined && salePriceNum >= priceNum) {
+      setProductFormError('Sale price must be lower than the regular price');
+      return;
+    }
+
+    const matchedStore = stores.find((s) => s.id === productFormData.sellerId) || stores[0];
+    const matchedCategory = categories.find((c) => c.name === productFormData.category) || categories[0];
+
+    const slug = trimmedName
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/(^-|-$)/g, '');
+
+    const finalImage = productFormData.imageUrl.trim() || PRODUCT_IMAGE_PRESETS[0].url;
+
+    if (editingProduct) {
+      updateProduct(editingProduct.id, {
+        name: trimmedName,
+        slug,
+        sellerId: matchedStore?.id || editingProduct.sellerId,
+        sellerName: matchedStore?.name || editingProduct.sellerName,
+        sellerVerified: matchedStore?.isVerified ?? true,
+        category: matchedCategory?.name || productFormData.category,
+        categoryId: matchedCategory?.id || editingProduct.categoryId,
+        price: priceNum,
+        salePrice: salePriceNum,
+        stock: Number(productFormData.stock) || 0,
+        unit: productFormData.unit.trim() || 'piece',
+        origin: productFormData.origin.trim() || 'GMC Organic Zone, Gelephu',
+        shortDescription: productFormData.shortDescription.trim() || trimmedName,
+        description: productFormData.description.trim() || trimmedName,
+        images: [finalImage],
+        isOrganic: productFormData.isOrganic,
+        isMadeInBhutan: productFormData.isMadeInBhutan,
+        isGmcExclusive: productFormData.isGmcExclusive,
+        isFeatured: productFormData.isFeatured,
+        isFlashDeal: productFormData.isFlashDeal,
+      });
+      setShowProductModal(false);
+      setEditingProduct(null);
+    } else {
+      addProduct({
+        sku: `GMC-${Math.floor(1000 + Math.random() * 9000)}`,
+        name: trimmedName,
+        slug,
+        sellerId: matchedStore?.id || 'store-general',
+        sellerName: matchedStore?.name || 'GMC Marketplace',
+        sellerVerified: matchedStore?.isVerified ?? true,
+        category: matchedCategory?.name || productFormData.category,
+        categoryId: matchedCategory?.id || 'cat-general',
+        price: priceNum,
+        salePrice: salePriceNum,
+        stock: Number(productFormData.stock) || 20,
+        lowStockThreshold: 5,
+        unit: productFormData.unit.trim() || 'piece',
+        origin: productFormData.origin.trim() || 'GMC Organic Zone, Gelephu',
+        shortDescription: productFormData.shortDescription.trim() || trimmedName,
+        description: productFormData.description.trim() || trimmedName,
+        images: [finalImage],
+        rating: 5.0,
+        reviewCount: 0,
+        tags: [matchedCategory?.name || 'GMC', 'Mindfulness City', 'Bhutan'],
+        isOrganic: productFormData.isOrganic,
+        isMadeInBhutan: productFormData.isMadeInBhutan,
+        isGmcExclusive: productFormData.isGmcExclusive,
+        isFeatured: productFormData.isFeatured,
+        isFlashDeal: productFormData.isFlashDeal,
+        isActive: true,
+        createdAt: new Date().toISOString(),
+      });
+      setShowProductModal(false);
+    }
+  };
+
+  // Seller & Merchant Management (Admin Add & Edit)
+  const [showSellerModal, setShowSellerModal] = useState(false);
+  const [editingSeller, setEditingSeller] = useState<SellerAccount | null>(null);
+  const [sellerSearch, setSellerSearch] = useState('');
+  const [sellerCategoryFilter, setSellerCategoryFilter] = useState('all');
+  const [sellerFormError, setSellerFormError] = useState('');
   const [sellerFormData, setSellerFormData] = useState({
     storeName: '',
     ownerName: '',
@@ -225,33 +425,100 @@ export const AdminDashboardModal: React.FC = () => {
     location: 'Agro-Mindfulness Sector, Gelephu',
     category: 'Groceries & Bhutanese Staples',
     description: '',
-    logo: 'https://images.unsplash.com/photo-1544717302-de2939b7ef71?w=150&auto=format&fit=crop&q=80',
-    coverImage: 'https://images.unsplash.com/photo-1500937386664-56d1dfef3854?w=1200&auto=format&fit=crop&q=80',
+    logo: STORE_LOGO_PRESETS[0].url,
+    coverImage: STORE_COVER_PRESETS[0].url,
     isVerified: true,
+    status: 'approved' as 'approved' | 'pending' | 'suspended',
   });
 
-  const handleCreateSellerSubmit = async (e: React.FormEvent) => {
+  const handleOpenAddSeller = () => {
+    setEditingSeller(null);
+    setSellerFormError('');
+    setSellerFormData({
+      storeName: '',
+      ownerName: '',
+      email: '',
+      password: 'seller123',
+      phone: '+975-17',
+      location: 'Agro-Mindfulness Sector, Gelephu',
+      category: categories[0]?.name || 'Groceries & Bhutanese Staples',
+      description: '',
+      logo: STORE_LOGO_PRESETS[0].url,
+      coverImage: STORE_COVER_PRESETS[0].url,
+      isVerified: true,
+      status: 'approved',
+    });
+    setShowSellerModal(true);
+  };
+
+  const handleOpenEditSeller = (seller: SellerAccount, store?: Store) => {
+    setEditingSeller(seller);
+    setSellerFormError('');
+    setSellerFormData({
+      storeName: seller.storeName || store?.name || '',
+      ownerName: seller.ownerName || '',
+      email: seller.email || store?.email || '',
+      password: seller.password || 'seller123',
+      phone: seller.phone || store?.phone || '+975-17',
+      location: seller.location || store?.location || 'Agro-Mindfulness Sector, Gelephu',
+      category: seller.category || store?.category || categories[0]?.name || 'Groceries & Bhutanese Staples',
+      description: seller.description || store?.description || '',
+      logo: seller.logo || store?.logo || STORE_LOGO_PRESETS[0].url,
+      coverImage: seller.coverImage || store?.coverImage || STORE_COVER_PRESETS[0].url,
+      isVerified: seller.isVerified !== undefined ? seller.isVerified : (store?.isVerified ?? true),
+      status: (seller.status as any) || (store?.status === 'suspended' ? 'suspended' : 'approved'),
+    });
+    setShowSellerModal(true);
+  };
+
+  const handleOpenEditStoreAndSeller = (store: Store) => {
+    const matched = sellers.find((s) => s.storeId === store.id || s.email.toLowerCase() === store.email.toLowerCase());
+    if (matched) {
+      handleOpenEditSeller(matched, store);
+    } else {
+      const syntheticSeller: SellerAccount = {
+        id: `seller-${store.id}`,
+        email: store.email,
+        storeId: store.id,
+        storeName: store.name,
+        ownerName: store.name.split(' ')[0] || 'Merchant Representative',
+        phone: store.phone,
+        location: store.location,
+        category: store.category,
+        description: store.description,
+        logo: store.logo,
+        coverImage: store.coverImage,
+        createdAt: store.joinedDate || new Date().toISOString(),
+        isVerified: store.isVerified,
+        status: store.status === 'suspended' ? 'suspended' : 'approved',
+      };
+      handleOpenEditSeller(syntheticSeller, store);
+    }
+  };
+
+  const handleSaveSellerSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setSellerFormError('');
     if (!sellerFormData.storeName.trim() || !sellerFormData.ownerName.trim() || !sellerFormData.email.trim()) {
-      showToast('Please fill in Store Name, Owner Name, and Email', 'error');
+      setSellerFormError('Please fill in Store Name, Owner Name, and Email');
       return;
     }
-    const res = await addSellerByAdmin(sellerFormData);
-    if (res.success) {
-      setShowAddSellerModal(false);
-      setSellerFormData({
-        storeName: '',
-        ownerName: '',
-        email: '',
-        password: 'seller123',
-        phone: '+975-17',
-        location: 'Agro-Mindfulness Sector, Gelephu',
-        category: categories[0]?.name || 'Groceries & Bhutanese Staples',
-        description: '',
-        logo: 'https://images.unsplash.com/photo-1544717302-de2939b7ef71?w=150&auto=format&fit=crop&q=80',
-        coverImage: 'https://images.unsplash.com/photo-1500937386664-56d1dfef3854?w=1200&auto=format&fit=crop&q=80',
-        isVerified: true,
-      });
+
+    if (editingSeller) {
+      const res = await updateSellerByAdmin(editingSeller.id, sellerFormData);
+      if (res.success) {
+        setShowSellerModal(false);
+        setEditingSeller(null);
+      } else {
+        setSellerFormError(res.message);
+      }
+    } else {
+      const res = await addSellerByAdmin(sellerFormData);
+      if (res.success) {
+        setShowSellerModal(false);
+      } else {
+        setSellerFormError(res.message);
+      }
     }
   };
 
@@ -729,78 +996,205 @@ export const AdminDashboardModal: React.FC = () => {
           {/* 2. PRODUCTS CATALOG TAB */}
           {activeTab === 'products' && (
             <div className="space-y-4">
-              <div>
-                <h4 className="font-bold text-sm text-slate-900 dark:text-white">Manage Marketplace Products</h4>
-                <p className="text-xs text-slate-500 dark:text-slate-400">
-                  Feature items on homepage or activate Today's Deals countdown ribbons.
-                </p>
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-2 border-b border-slate-200 dark:border-slate-800">
+                <div>
+                  <h4 className="font-bold text-sm text-slate-900 dark:text-white">
+                    Marketplace Products Catalog ({products.length})
+                  </h4>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">
+                    Add new products, edit pricing and details, manage stock, and toggle homepage spotlights.
+                  </p>
+                </div>
+                <button
+                  onClick={handleOpenAddProduct}
+                  className="flex items-center gap-1.5 px-3.5 py-2 bg-teal-800 hover:bg-teal-900 text-white rounded-xl text-xs font-bold transition-all shadow-xs cursor-pointer shrink-0"
+                >
+                  <Plus className="w-4 h-4" />
+                  <span>+ Add New Product</span>
+                </button>
               </div>
 
-              <div className="border border-slate-200 dark:border-slate-800 rounded-2xl overflow-hidden bg-white dark:bg-slate-850 shadow-2xs">
-                <table className="w-full text-left text-xs">
-                  <thead className="bg-slate-50 dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider text-[10px]">
-                    <tr>
-                      <th className="p-3">Item</th>
-                      <th className="p-3">Seller</th>
-                      <th className="p-3">Price</th>
-                      <th className="p-3">Flash Deal?</th>
-                      <th className="p-3">Featured?</th>
-                      <th className="p-3 text-right">Delete</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                    {products.map((p) => (
-                      <tr key={p.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/60 transition-colors">
-                        <td className="p-3 flex items-center gap-2.5">
-                          <img
-                            src={p.images[0]}
-                            alt={p.name}
-                            className="w-9 h-9 rounded-lg object-contain bg-slate-50 dark:bg-slate-800 p-1 border border-slate-200 dark:border-slate-700 shrink-0"
-                          />
-                          <span className="font-bold text-slate-900 dark:text-white line-clamp-1">{p.name}</span>
-                        </td>
-                        <td className="p-3 text-slate-600 dark:text-slate-400 truncate max-w-[150px]">{p.sellerName}</td>
-                        <td className="p-3 font-bold text-slate-900 dark:text-white">
-                          {formatNu(p.salePrice || p.price)}
-                        </td>
-                        <td className="p-3">
-                          <button
-                            onClick={() => handleToggleFlashDeal(p)}
-                            className={`px-2 py-0.5 rounded-full text-[10px] font-extrabold flex items-center gap-1 cursor-pointer ${
-                              p.isFlashDeal
-                                ? 'bg-amber-100 dark:bg-amber-900/60 text-amber-900 dark:text-amber-200 border border-amber-300 dark:border-amber-700'
-                                : 'bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-500'
-                            }`}
-                          >
-                            <Flame className="w-3 h-3" />
-                            <span>{p.isFlashDeal ? 'Active Deal' : 'Off'}</span>
-                          </button>
-                        </td>
-                        <td className="p-3">
-                          <button
-                            onClick={() => handleToggleFeatured(p)}
-                            className={`px-2 py-0.5 rounded-full text-[10px] font-bold cursor-pointer ${
-                              p.isFeatured
-                                ? 'bg-teal-100 dark:bg-teal-900/60 text-teal-900 dark:text-teal-200 border border-teal-300 dark:border-teal-700'
-                                : 'bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-500'
-                            }`}
-                          >
-                            {p.isFeatured ? 'Featured' : 'Standard'}
-                          </button>
-                        </td>
-                        <td className="p-3 text-right">
-                          <button
-                            onClick={() => deleteProduct(p.id)}
-                            className="text-slate-400 dark:text-slate-500 hover:text-rose-600 dark:hover:text-rose-400 p-1 cursor-pointer"
-                            aria-label="Delete"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                        </td>
-                      </tr>
+              {/* Filters & Search */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                <div className="relative">
+                  <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                  <input
+                    type="text"
+                    placeholder="Search product name, SKU, or seller..."
+                    value={productSearch}
+                    onChange={(e) => setProductSearch(e.target.value)}
+                    className="w-full pl-9 pr-3 py-2 text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white outline-hidden focus:ring-2 focus:ring-teal-700"
+                  />
+                </div>
+
+                <div>
+                  <select
+                    value={productCategoryFilter}
+                    onChange={(e) => setProductCategoryFilter(e.target.value)}
+                    className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white outline-hidden focus:ring-2 focus:ring-teal-700 cursor-pointer"
+                  >
+                    <option value="all">All Categories ({categories.length})</option>
+                    {categories.map((c) => (
+                      <option key={c.id} value={c.name}>
+                        {c.name}
+                      </option>
                     ))}
-                  </tbody>
-                </table>
+                  </select>
+                </div>
+
+                <div>
+                  <select
+                    value={productSellerFilter}
+                    onChange={(e) => setProductSellerFilter(e.target.value)}
+                    className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white outline-hidden focus:ring-2 focus:ring-teal-700 cursor-pointer"
+                  >
+                    <option value="all">All Merchants ({stores.length})</option>
+                    {stores.map((s) => (
+                      <option key={s.id} value={s.id}>
+                        {s.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              {/* Products Table */}
+              <div className="border border-slate-200 dark:border-slate-800 rounded-2xl overflow-hidden bg-white dark:bg-slate-850 shadow-2xs">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-xs">
+                    <thead className="bg-slate-50 dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider text-[10px]">
+                      <tr>
+                        <th className="p-3">Item Details</th>
+                        <th className="p-3">Merchant / Store</th>
+                        <th className="p-3">Category</th>
+                        <th className="p-3">Price & Stock</th>
+                        <th className="p-3">Flash Deal</th>
+                        <th className="p-3">Featured</th>
+                        <th className="p-3 text-right">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                      {products
+                        .filter((p) => {
+                          const matchesSearch =
+                            p.name.toLowerCase().includes(productSearch.toLowerCase()) ||
+                            (p.sku && p.sku.toLowerCase().includes(productSearch.toLowerCase())) ||
+                            p.sellerName.toLowerCase().includes(productSearch.toLowerCase());
+                          const matchesCategory =
+                            productCategoryFilter === 'all' || p.category === productCategoryFilter;
+                          const matchesSeller =
+                            productSellerFilter === 'all' || p.sellerId === productSellerFilter;
+                          return matchesSearch && matchesCategory && matchesSeller;
+                        })
+                        .map((p) => (
+                          <tr key={p.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/60 transition-colors">
+                            <td className="p-3">
+                              <div className="flex items-center gap-2.5">
+                                <img
+                                  src={p.images[0]}
+                                  alt={p.name}
+                                  className="w-10 h-10 rounded-lg object-contain bg-slate-50 dark:bg-slate-800 p-1 border border-slate-200 dark:border-slate-700 shrink-0"
+                                />
+                                <div>
+                                  <span className="font-bold text-slate-900 dark:text-white line-clamp-1">
+                                    {p.name}
+                                  </span>
+                                  <div className="flex items-center gap-1.5 text-[10px] text-slate-400 dark:text-slate-500 mt-0.5">
+                                    <span className="font-mono">{p.sku || 'No SKU'}</span>
+                                    {p.isOrganic && (
+                                      <span className="text-emerald-700 dark:text-emerald-400 font-medium">
+                                        • Organic
+                                      </span>
+                                    )}
+                                    {p.isMadeInBhutan && (
+                                      <span className="text-amber-700 dark:text-amber-400 font-medium">
+                                        • Bhutan
+                                      </span>
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
+                            </td>
+                            <td className="p-3">
+                              <div className="text-slate-700 dark:text-slate-300 font-medium truncate max-w-[140px]">
+                                {p.sellerName}
+                              </div>
+                              <span className="text-[10px] text-slate-400">
+                                {p.sellerVerified ? 'Verified' : 'Unverified'}
+                              </span>
+                            </td>
+                            <td className="p-3 text-slate-600 dark:text-slate-400">
+                              <span className="bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded text-[11px]">
+                                {p.category}
+                              </span>
+                            </td>
+                            <td className="p-3">
+                              <div className="font-bold text-slate-900 dark:text-white">
+                                {formatNu(p.salePrice || p.price)}
+                              </div>
+                              {p.salePrice && (
+                                <div className="text-[10px] text-slate-400 line-through">
+                                  {formatNu(p.price)}
+                                </div>
+                              )}
+                              <div className="text-[10px] text-slate-500 mt-0.5">
+                                Stock: <span className="font-semibold">{p.stock}</span> {p.unit || 'unit'}
+                              </div>
+                            </td>
+                            <td className="p-3">
+                              <button
+                                onClick={() => handleToggleFlashDeal(p)}
+                                className={`px-2 py-0.5 rounded-full text-[10px] font-extrabold flex items-center gap-1 cursor-pointer transition-colors ${
+                                  p.isFlashDeal
+                                    ? 'bg-amber-100 dark:bg-amber-900/60 text-amber-900 dark:text-amber-200 border border-amber-300 dark:border-amber-700'
+                                    : 'bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-500 hover:bg-slate-200'
+                                }`}
+                              >
+                                <Flame className="w-3 h-3" />
+                                <span>{p.isFlashDeal ? 'Active' : 'Off'}</span>
+                              </button>
+                            </td>
+                            <td className="p-3">
+                              <button
+                                onClick={() => handleToggleFeatured(p)}
+                                className={`px-2 py-0.5 rounded-full text-[10px] font-bold cursor-pointer transition-colors ${
+                                  p.isFeatured
+                                    ? 'bg-teal-100 dark:bg-teal-900/60 text-teal-900 dark:text-teal-200 border border-teal-300 dark:border-teal-700'
+                                    : 'bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-500 hover:bg-slate-200'
+                                }`}
+                              >
+                                {p.isFeatured ? 'Featured' : 'Standard'}
+                              </button>
+                            </td>
+                            <td className="p-3 text-right">
+                              <div className="flex items-center justify-end gap-1.5">
+                                <button
+                                  onClick={() => handleOpenEditProduct(p)}
+                                  className="px-2.5 py-1 text-[11px] font-bold text-teal-800 dark:text-teal-300 bg-teal-50 dark:bg-teal-950/60 hover:bg-teal-100 dark:hover:bg-teal-900/60 rounded-lg border border-teal-200 dark:border-teal-800 transition-colors cursor-pointer flex items-center gap-1"
+                                  title="Edit Product"
+                                >
+                                  <Edit2 className="w-3 h-3" />
+                                  <span>Edit</span>
+                                </button>
+                                <button
+                                  onClick={() => {
+                                    if (window.confirm(`Delete product "${p.name}"?`)) {
+                                      deleteProduct(p.id);
+                                    }
+                                  }}
+                                  className="text-slate-400 dark:text-slate-500 hover:text-rose-600 dark:hover:text-rose-400 p-1.5 rounded-lg hover:bg-rose-50 dark:hover:bg-rose-950/30 transition-colors cursor-pointer"
+                                  aria-label="Delete"
+                                  title="Delete Product"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        ))}
+                    </tbody>
+                  </table>
+                </div>
               </div>
             </div>
           )}
@@ -811,14 +1205,14 @@ export const AdminDashboardModal: React.FC = () => {
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-2 border-b border-slate-200 dark:border-slate-800">
                 <div>
                   <h4 className="font-bold text-sm text-slate-900 dark:text-white">
-                    GMC Registered Businesses & Cooperatives
+                    GMC Registered Businesses & Cooperatives ({stores.length})
                   </h4>
                   <p className="text-xs text-slate-500 dark:text-slate-400">
-                    Onboard new merchants, manage verification credentials, or contact store owners via WhatsApp.
+                    Onboard new merchants, edit store profiles, manage verification credentials, or contact owners.
                   </p>
                 </div>
                 <button
-                  onClick={() => setShowAddSellerModal(true)}
+                  onClick={handleOpenAddSeller}
                   className="flex items-center gap-1.5 px-3.5 py-2 bg-teal-800 hover:bg-teal-900 text-white rounded-xl text-xs font-bold transition-all shadow-xs cursor-pointer shrink-0"
                 >
                   <UserPlus className="w-4 h-4" />
@@ -826,92 +1220,149 @@ export const AdminDashboardModal: React.FC = () => {
                 </button>
               </div>
 
+              {/* Store Search & Category Filter */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                <div className="relative">
+                  <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                  <input
+                    type="text"
+                    placeholder="Search store name, location, or contact..."
+                    value={sellerSearch}
+                    onChange={(e) => setSellerSearch(e.target.value)}
+                    className="w-full pl-9 pr-3 py-2 text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white outline-hidden focus:ring-2 focus:ring-teal-700"
+                  />
+                </div>
+
+                <div>
+                  <select
+                    value={sellerCategoryFilter}
+                    onChange={(e) => setSellerCategoryFilter(e.target.value)}
+                    className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white outline-hidden focus:ring-2 focus:ring-teal-700 cursor-pointer"
+                  >
+                    <option value="all">All Sectors & Categories</option>
+                    {categories.map((c) => (
+                      <option key={c.id} value={c.name}>
+                        {c.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                {stores.map((s) => {
-                  const matchedSeller = sellers.find((sel) => sel.storeId === s.id);
-                  return (
-                    <div
-                      key={s.id}
-                      className="p-4 rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-850 flex flex-col justify-between gap-3"
-                    >
-                      <div className="flex items-start gap-3">
-                        <img
-                          src={s.logo}
-                          alt={s.name}
-                          className="w-12 h-12 rounded-xl object-cover border border-slate-200 dark:border-slate-700 shrink-0"
-                        />
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-1.5">
-                            <h5 className="font-bold text-sm text-slate-900 dark:text-white truncate">{s.name}</h5>
-                            {s.isVerified && (
-                              <CheckCircle2 className="w-3.5 h-3.5 text-teal-600 dark:text-teal-400 shrink-0" />
+                {stores
+                  .filter((s) => {
+                    const matchesSearch =
+                      s.name.toLowerCase().includes(sellerSearch.toLowerCase()) ||
+                      s.location.toLowerCase().includes(sellerSearch.toLowerCase()) ||
+                      s.email.toLowerCase().includes(sellerSearch.toLowerCase());
+                    const matchesCategory =
+                      sellerCategoryFilter === 'all' || s.category === sellerCategoryFilter;
+                    return matchesSearch && matchesCategory;
+                  })
+                  .map((s) => {
+                    const matchedSeller = sellers.find(
+                      (sel) => sel.storeId === s.id || sel.email.toLowerCase() === s.email.toLowerCase()
+                    );
+                    const storeProductsCount = products.filter((p) => p.sellerId === s.id).length;
+
+                    return (
+                      <div
+                        key={s.id}
+                        className="p-4 rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-850 flex flex-col justify-between gap-3 shadow-2xs hover:border-teal-700/40 transition-colors"
+                      >
+                        <div className="flex items-start gap-3">
+                          <img
+                            src={s.logo}
+                            alt={s.name}
+                            className="w-12 h-12 rounded-xl object-cover border border-slate-200 dark:border-slate-700 shrink-0"
+                          />
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <h5 className="font-bold text-sm text-slate-900 dark:text-white truncate">
+                                {s.name}
+                              </h5>
+                              {s.isVerified && (
+                                <CheckCircle2 className="w-3.5 h-3.5 text-teal-600 dark:text-teal-400 shrink-0" />
+                              )}
+                              <span className="bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 text-[10px] px-1.5 py-0.5 rounded font-medium">
+                                {storeProductsCount} items
+                              </span>
+                            </div>
+                            <p className="text-xs text-slate-500 dark:text-slate-400 truncate">{s.location}</p>
+                            <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-0.5">
+                              Category: <span className="font-medium text-slate-600 dark:text-slate-300">{s.category}</span>
+                            </p>
+                            {matchedSeller && (
+                              <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5 truncate">
+                                Representative: {matchedSeller.ownerName} ({matchedSeller.email})
+                              </p>
                             )}
                           </div>
-                          <p className="text-xs text-slate-500 dark:text-slate-400 truncate">{s.location}</p>
-                          <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-0.5">
-                            Category: <span className="font-medium text-slate-600 dark:text-slate-300">{s.category}</span>
-                          </p>
-                          {matchedSeller && (
-                            <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
-                              Owner: {matchedSeller.ownerName} ({matchedSeller.email})
-                            </p>
-                          )}
+                        </div>
+
+                        <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex flex-wrap items-center justify-between gap-2">
+                          <div className="flex items-center gap-1.5">
+                            <button
+                              onClick={() => handleOpenEditStoreAndSeller(s)}
+                              className="px-2.5 py-1.5 text-xs font-bold text-teal-800 dark:text-teal-300 bg-teal-50 dark:bg-teal-950/60 hover:bg-teal-100 dark:hover:bg-teal-900/60 rounded-xl border border-teal-200 dark:border-teal-800 transition-colors cursor-pointer flex items-center gap-1"
+                              title="Edit Seller and Store Details"
+                            >
+                              <Edit2 className="w-3.5 h-3.5" />
+                              <span>Edit Seller</span>
+                            </button>
+
+                            <a
+                              href={formatWhatsAppUrl(
+                                s.phone,
+                                `Kuzu Zangpo! Official communication from GMC Marketplace Admin regarding ${s.name}.`
+                              )}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="bg-emerald-50 dark:bg-emerald-950/60 hover:bg-emerald-100 text-emerald-800 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 text-[11px] font-bold px-2 py-1.5 rounded-lg flex items-center gap-1 transition-colors cursor-pointer"
+                              title="Chat with store owner on WhatsApp"
+                            >
+                              <MessageCircle className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+                              <span>WhatsApp</span>
+                            </a>
+
+                            <a
+                              href={`tel:${s.phone}`}
+                              className="bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 text-[11px] font-bold px-2 py-1.5 rounded-lg flex items-center gap-1 transition-colors cursor-pointer"
+                            >
+                              <Phone className="w-3 h-3" />
+                              <span>Call</span>
+                            </a>
+                          </div>
+
+                          <div className="flex items-center gap-1.5">
+                            <button
+                              onClick={() => handleToggleStoreVerification(s)}
+                              className={`text-xs font-bold px-2.5 py-1.5 rounded-xl transition-colors cursor-pointer ${
+                                s.isVerified
+                                  ? 'bg-teal-100 dark:bg-teal-900/60 text-teal-800 dark:text-teal-200 hover:bg-rose-100 dark:hover:bg-rose-950/60 hover:text-rose-800 dark:hover:text-rose-300'
+                                  : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-teal-700 hover:text-white'
+                              }`}
+                            >
+                              {s.isVerified ? '✓ Verified' : 'Approve GMC'}
+                            </button>
+
+                            <button
+                              onClick={() => {
+                                if (window.confirm(`Are you sure you want to remove store "${s.name}"?`)) {
+                                  deleteStoreByAdmin(s.id);
+                                }
+                              }}
+                              className="p-1.5 text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 rounded-lg hover:bg-rose-50 dark:hover:bg-rose-950/30 transition-colors cursor-pointer"
+                              title="Remove Store"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
                         </div>
                       </div>
-
-                      <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex flex-wrap items-center justify-between gap-2">
-                        <div className="flex items-center gap-2">
-                          <a
-                            href={formatWhatsAppUrl(
-                              s.phone,
-                              `Kuzu Zangpo! Official communication from GMC Marketplace Admin regarding ${s.name}.`
-                            )}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="bg-emerald-50 dark:bg-emerald-950/60 hover:bg-emerald-100 text-emerald-800 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 text-[11px] font-bold px-2.5 py-1.5 rounded-lg flex items-center gap-1 transition-colors cursor-pointer"
-                            title="Chat with store owner on WhatsApp"
-                          >
-                            <MessageCircle className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
-                            <span>WhatsApp</span>
-                          </a>
-
-                          <a
-                            href={`tel:${s.phone}`}
-                            className="bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 text-[11px] font-bold px-2.5 py-1.5 rounded-lg flex items-center gap-1 transition-colors cursor-pointer"
-                          >
-                            <Phone className="w-3 h-3" />
-                            <span>Call</span>
-                          </a>
-                        </div>
-
-                        <div className="flex items-center gap-1.5">
-                          <button
-                            onClick={() => handleToggleStoreVerification(s)}
-                            className={`text-xs font-bold px-3 py-1.5 rounded-xl transition-colors cursor-pointer ${
-                              s.isVerified
-                                ? 'bg-teal-100 dark:bg-teal-900/60 text-teal-800 dark:text-teal-200 hover:bg-rose-100 dark:hover:bg-rose-950/60 hover:text-rose-800 dark:hover:text-rose-300'
-                                : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-teal-700 hover:text-white'
-                            }`}
-                          >
-                            {s.isVerified ? '✓ Verified Partner' : 'Approve GMC'}
-                          </button>
-
-                          <button
-                            onClick={() => {
-                              if (window.confirm(`Are you sure you want to remove store "${s.name}"?`)) {
-                                deleteStoreByAdmin(s.id);
-                              }
-                            }}
-                            className="p-1.5 text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 rounded-lg hover:bg-rose-50 dark:hover:bg-rose-950/30 transition-colors cursor-pointer"
-                            title="Remove Store"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
+                    );
+                  })}
               </div>
             </div>
           )}
@@ -1428,7 +1879,7 @@ export const AdminDashboardModal: React.FC = () => {
                   </div>
 
                   <button
-                    onClick={() => setShowAddSellerModal(true)}
+                    onClick={handleOpenAddSeller}
                     className="flex items-center gap-1.5 px-3 py-1.5 bg-teal-800 hover:bg-teal-900 text-white rounded-xl text-xs font-bold transition-all shadow-xs cursor-pointer self-start sm:self-auto shrink-0"
                   >
                     <UserPlus className="w-3.5 h-3.5" />
@@ -1458,6 +1909,15 @@ export const AdminDashboardModal: React.FC = () => {
                       </div>
 
                       <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => handleOpenEditSeller(s)}
+                          className="bg-teal-50 dark:bg-teal-950/60 hover:bg-teal-100 text-teal-800 dark:text-teal-300 border border-teal-200 dark:border-teal-800 text-[11px] font-bold px-2 py-1 rounded-lg flex items-center gap-1 transition-colors cursor-pointer"
+                          title="Edit merchant credentials & details"
+                        >
+                          <Edit2 className="w-3.5 h-3.5" />
+                          <span>Edit</span>
+                        </button>
+
                         <a
                           href={formatWhatsAppUrl(
                             s.phone,
@@ -1492,33 +1952,42 @@ export const AdminDashboardModal: React.FC = () => {
           )}
         </div>
 
-        {/* Modal: Add New Seller / Store Provisioning */}
-        {showAddSellerModal && (
+        {/* Modal: Add or Edit Seller / Store */}
+        {showSellerModal && (
           <div className="fixed inset-0 z-60 bg-slate-950/70 backdrop-blur-xs flex items-center justify-center p-4">
             <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl w-full max-w-lg shadow-2xl max-h-[90vh] flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-150">
               <div className="px-6 py-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
                 <div className="flex items-center gap-2.5">
                   <div className="w-9 h-9 rounded-xl bg-teal-800 text-white flex items-center justify-center font-bold">
-                    <UserPlus className="w-5 h-5" />
+                    {editingSeller ? <Edit2 className="w-5 h-5" /> : <UserPlus className="w-5 h-5" />}
                   </div>
                   <div>
                     <h3 className="font-extrabold text-slate-900 dark:text-white text-base">
-                      Onboard New Seller / Merchant
+                      {editingSeller ? `Edit Merchant: ${editingSeller.storeName}` : 'Onboard New Seller / Merchant'}
                     </h3>
                     <p className="text-xs text-slate-500 dark:text-slate-400">
-                      Create store profile and login credentials for GMC seller
+                      {editingSeller
+                        ? 'Update merchant profile, credentials, and verification status'
+                        : 'Create store profile and login credentials for GMC seller'}
                     </p>
                   </div>
                 </div>
                 <button
-                  onClick={() => setShowAddSellerModal(false)}
+                  onClick={() => setShowSellerModal(false)}
                   className="p-1.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer"
                 >
                   <X className="w-5 h-5" />
                 </button>
               </div>
 
-              <form onSubmit={handleCreateSellerSubmit} className="p-6 overflow-y-auto space-y-4 text-xs">
+              {sellerFormError && (
+                <div className="mx-6 mt-4 p-3 rounded-xl bg-rose-50 dark:bg-rose-950/50 border border-rose-200 dark:border-rose-800 text-xs font-semibold text-rose-700 dark:text-rose-300 flex items-center gap-2">
+                  <AlertTriangle className="w-4 h-4 shrink-0" />
+                  <span>{sellerFormError}</span>
+                </div>
+              )}
+
+              <form onSubmit={handleSaveSellerSubmit} className="p-6 overflow-y-auto space-y-4 text-xs">
                 <div>
                   <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">
                     Store / Cooperative Name *
@@ -1580,7 +2049,7 @@ export const AdminDashboardModal: React.FC = () => {
 
                   <div>
                     <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">
-                      Initial Password *
+                      {editingSeller ? 'Reset / Update Password' : 'Initial Password *'}
                     </label>
                     <input
                       type="text"
@@ -1627,6 +2096,21 @@ export const AdminDashboardModal: React.FC = () => {
 
                 <div>
                   <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">
+                    Store Status
+                  </label>
+                  <select
+                    value={sellerFormData.status}
+                    onChange={(e) => setSellerFormData({ ...sellerFormData, status: e.target.value as any })}
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white font-medium focus:ring-2 focus:ring-teal-700 outline-hidden cursor-pointer"
+                  >
+                    <option value="approved">Approved & Active</option>
+                    <option value="pending">Pending Approval</option>
+                    <option value="suspended">Suspended / Deactivated</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">
                     Store Description & Tagline
                   </label>
                   <textarea
@@ -1640,20 +2124,22 @@ export const AdminDashboardModal: React.FC = () => {
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-1">
                   <ImageUpload
-                    id="admin-new-seller-logo"
+                    id="admin-seller-logo"
                     label="Store Logo / Brand Emblem"
                     sublabel="Square (1:1) merchant avatar"
                     value={sellerFormData.logo || ''}
                     onChange={(url) => setSellerFormData({ ...sellerFormData, logo: url })}
                     variant="logo"
+                    presets={STORE_LOGO_PRESETS}
                   />
                   <ImageUpload
-                    id="admin-new-seller-cover"
+                    id="admin-seller-cover"
                     label="Storefront Cover Banner"
                     sublabel="Landscape store header photo"
                     value={sellerFormData.coverImage || ''}
                     onChange={(url) => setSellerFormData({ ...sellerFormData, coverImage: url })}
                     variant="cover"
+                    presets={STORE_COVER_PRESETS}
                   />
                 </div>
 
@@ -1673,7 +2159,7 @@ export const AdminDashboardModal: React.FC = () => {
                 <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-end gap-2">
                   <button
                     type="button"
-                    onClick={() => setShowAddSellerModal(false)}
+                    onClick={() => setShowSellerModal(false)}
                     className="px-4 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 font-bold hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer transition-colors"
                   >
                     Cancel
@@ -1682,8 +2168,284 @@ export const AdminDashboardModal: React.FC = () => {
                     type="submit"
                     className="px-5 py-2 rounded-xl bg-teal-800 hover:bg-teal-900 text-white font-bold shadow-xs cursor-pointer transition-all flex items-center gap-1.5"
                   >
-                    <UserPlus className="w-4 h-4" />
-                    <span>Create & Onboard Seller</span>
+                    <CheckCircle2 className="w-4 h-4" />
+                    <span>{editingSeller ? 'Save Merchant Changes' : 'Create & Onboard Seller'}</span>
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
+
+        {/* Modal: Add or Edit Product */}
+        {showProductModal && (
+          <div className="fixed inset-0 z-60 bg-slate-950/70 backdrop-blur-xs flex items-center justify-center p-4">
+            <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl w-full max-w-xl shadow-2xl max-h-[92vh] flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+              <div className="px-6 py-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-9 h-9 rounded-xl bg-teal-800 text-white flex items-center justify-center font-bold">
+                    {editingProduct ? <Edit2 className="w-5 h-5" /> : <Package className="w-5 h-5" />}
+                  </div>
+                  <div>
+                    <h3 className="font-extrabold text-slate-900 dark:text-white text-base">
+                      {editingProduct ? `Edit Product: ${editingProduct.name}` : 'Add New Product to Marketplace'}
+                    </h3>
+                    <p className="text-xs text-slate-500 dark:text-slate-400">
+                      {editingProduct
+                        ? 'Update pricing, inventory, images, and homepage features'
+                        : 'List a new item under any GMC licensed merchant'}
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setShowProductModal(false)}
+                  className="p-1.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              {productFormError && (
+                <div className="mx-6 mt-4 p-3 rounded-xl bg-rose-50 dark:bg-rose-950/50 border border-rose-200 dark:border-rose-800 text-xs font-semibold text-rose-700 dark:text-rose-300 flex items-center gap-2">
+                  <AlertTriangle className="w-4 h-4 shrink-0" />
+                  <span>{productFormError}</span>
+                </div>
+              )}
+
+              <form onSubmit={handleSaveProductSubmit} className="p-6 overflow-y-auto space-y-4 text-xs">
+                <div>
+                  <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">
+                    Product Title *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="e.g. Gelephu Organic Mountain Honey (500g)"
+                    value={productFormData.name}
+                    onChange={(e) => setProductFormData({ ...productFormData, name: e.target.value })}
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white font-medium focus:ring-2 focus:ring-teal-700 outline-hidden"
+                  />
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">
+                      Assigned Merchant / Store *
+                    </label>
+                    <select
+                      value={productFormData.sellerId}
+                      onChange={(e) => setProductFormData({ ...productFormData, sellerId: e.target.value })}
+                      className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white font-medium focus:ring-2 focus:ring-teal-700 outline-hidden cursor-pointer"
+                      required
+                    >
+                      {stores.map((s) => (
+                        <option key={s.id} value={s.id}>
+                          {s.name} ({s.location})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">
+                      Category *
+                    </label>
+                    <select
+                      value={productFormData.category}
+                      onChange={(e) => setProductFormData({ ...productFormData, category: e.target.value })}
+                      className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white font-medium focus:ring-2 focus:ring-teal-700 outline-hidden cursor-pointer"
+                      required
+                    >
+                      {categories.map((c) => (
+                        <option key={c.id} value={c.name}>
+                          {c.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div>
+                    <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">
+                      Regular Price (Nu.) *
+                    </label>
+                    <input
+                      type="number"
+                      min="1"
+                      step="any"
+                      required
+                      placeholder="450"
+                      value={productFormData.price}
+                      onChange={(e) => setProductFormData({ ...productFormData, price: Number(e.target.value) })}
+                      className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white font-bold focus:ring-2 focus:ring-teal-700 outline-hidden"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">
+                      Sale Price (Nu.) <span className="text-slate-400 font-normal">(Optional)</span>
+                    </label>
+                    <input
+                      type="number"
+                      min="0"
+                      step="any"
+                      placeholder="Optional discount"
+                      value={productFormData.salePrice}
+                      onChange={(e) => setProductFormData({ ...productFormData, salePrice: e.target.value })}
+                      className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white font-bold focus:ring-2 focus:ring-teal-700 outline-hidden"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">
+                      Stock Quantity *
+                    </label>
+                    <input
+                      type="number"
+                      min="0"
+                      required
+                      placeholder="25"
+                      value={productFormData.stock}
+                      onChange={(e) => setProductFormData({ ...productFormData, stock: Number(e.target.value) })}
+                      className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white font-bold focus:ring-2 focus:ring-teal-700 outline-hidden"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">
+                      Packaging Unit
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="e.g. 500g jar, kg, piece, pack"
+                      value={productFormData.unit}
+                      onChange={(e) => setProductFormData({ ...productFormData, unit: e.target.value })}
+                      className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white font-medium focus:ring-2 focus:ring-teal-700 outline-hidden"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">
+                      Origin / Dzongkhag
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="e.g. GMC Organic Zone, Sarpang Dzongkhag"
+                      value={productFormData.origin}
+                      onChange={(e) => setProductFormData({ ...productFormData, origin: e.target.value })}
+                      className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white font-medium focus:ring-2 focus:ring-teal-700 outline-hidden"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">
+                    Short Summary
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="Brief highlight of the product..."
+                    value={productFormData.shortDescription}
+                    onChange={(e) => setProductFormData({ ...productFormData, shortDescription: e.target.value })}
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white font-medium focus:ring-2 focus:ring-teal-700 outline-hidden"
+                  />
+                </div>
+
+                <div>
+                  <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">
+                    Full Description & Mindfulness Story
+                  </label>
+                  <textarea
+                    rows={3}
+                    placeholder="Describe harvest method, traditional ingredients, and sustainable packaging..."
+                    value={productFormData.description}
+                    onChange={(e) => setProductFormData({ ...productFormData, description: e.target.value })}
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white font-medium focus:ring-2 focus:ring-teal-700 outline-hidden resize-none"
+                  />
+                </div>
+
+                <div>
+                  <ImageUpload
+                    id="admin-product-image"
+                    label="Product Display Photo"
+                    sublabel="High quality photo of the product"
+                    value={productFormData.imageUrl}
+                    onChange={(url) => setProductFormData({ ...productFormData, imageUrl: url })}
+                    variant="cover"
+                    presets={PRODUCT_IMAGE_PRESETS}
+                  />
+                </div>
+
+                <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 space-y-2.5">
+                  <span className="font-bold text-slate-900 dark:text-white block text-xs">
+                    Certifications & Marketplace Badges
+                  </span>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-xs">
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={productFormData.isOrganic}
+                        onChange={(e) => setProductFormData({ ...productFormData, isOrganic: e.target.checked })}
+                        className="w-4 h-4 rounded text-teal-700 focus:ring-teal-600"
+                      />
+                      <span className="text-slate-700 dark:text-slate-300">100% Organic</span>
+                    </label>
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={productFormData.isMadeInBhutan}
+                        onChange={(e) => setProductFormData({ ...productFormData, isMadeInBhutan: e.target.checked })}
+                        className="w-4 h-4 rounded text-teal-700 focus:ring-teal-600"
+                      />
+                      <span className="text-slate-700 dark:text-slate-300">Made in Bhutan</span>
+                    </label>
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={productFormData.isGmcExclusive}
+                        onChange={(e) => setProductFormData({ ...productFormData, isGmcExclusive: e.target.checked })}
+                        className="w-4 h-4 rounded text-teal-700 focus:ring-teal-600"
+                      />
+                      <span className="text-slate-700 dark:text-slate-300">GMC Exclusive</span>
+                    </label>
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={productFormData.isFeatured}
+                        onChange={(e) => setProductFormData({ ...productFormData, isFeatured: e.target.checked })}
+                        className="w-4 h-4 rounded text-teal-700 focus:ring-teal-600"
+                      />
+                      <span className="text-slate-700 dark:text-slate-300">Featured</span>
+                    </label>
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={productFormData.isFlashDeal}
+                        onChange={(e) => setProductFormData({ ...productFormData, isFlashDeal: e.target.checked })}
+                        className="w-4 h-4 rounded text-teal-700 focus:ring-teal-600"
+                      />
+                      <span className="text-slate-700 dark:text-slate-300">Flash Deal</span>
+                    </label>
+                  </div>
+                </div>
+
+                <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-end gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setShowProductModal(false)}
+                    className="px-4 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 font-bold hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    className="px-5 py-2 rounded-xl bg-teal-800 hover:bg-teal-900 text-white font-bold shadow-xs cursor-pointer transition-all flex items-center gap-1.5"
+                  >
+                    <CheckCircle2 className="w-4 h-4" />
+                    <span>{editingProduct ? 'Save Product Changes' : 'List Product Now'}</span>
                   </button>
                 </div>
               </form>

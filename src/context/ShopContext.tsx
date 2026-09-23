@@ -143,6 +143,23 @@ interface ShopContextType {
     coverImage?: string;
     isVerified?: boolean;
   }) => Promise<{ success: boolean; message: string; seller?: SellerAccount; store?: Store }>;
+  updateSellerByAdmin: (
+    sellerId: string,
+    data: {
+      storeName?: string;
+      ownerName?: string;
+      email?: string;
+      password?: string;
+      phone?: string;
+      location?: string;
+      category?: string;
+      description?: string;
+      logo?: string;
+      coverImage?: string;
+      isVerified?: boolean;
+      status?: 'pending' | 'approved' | 'rejected' | 'suspended';
+    }
+  ) => Promise<{ success: boolean; message: string; seller?: SellerAccount; store?: Store }>;
   deleteSellerByAdmin: (sellerId: string) => { success: boolean; message: string };
   deleteStoreByAdmin: (storeId: string) => { success: boolean; message: string };
 
@@ -738,6 +755,133 @@ export const ShopProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     return res;
   };
 
+  const updateSellerByAdmin = async (
+    sellerId: string,
+    data: {
+      storeName?: string;
+      ownerName?: string;
+      email?: string;
+      password?: string;
+      phone?: string;
+      location?: string;
+      category?: string;
+      description?: string;
+      logo?: string;
+      coverImage?: string;
+      isVerified?: boolean;
+      status?: 'pending' | 'approved' | 'rejected' | 'suspended';
+    }
+  ) => {
+    if (!isAdminAuthenticated) {
+      showToast('Access Restricted: Administrator authentication required.', 'error');
+      return { success: false, message: 'Administrator authentication required.' };
+    }
+
+    const currentSellers = storageService.getSellers();
+    const existingSeller = currentSellers.find((s) => s.id === sellerId);
+    if (!existingSeller) {
+      showToast('Seller not found', 'error');
+      return { success: false, message: 'Seller not found' };
+    }
+
+    const updatedSeller: SellerAccount = {
+      ...existingSeller,
+      storeName: data.storeName !== undefined ? data.storeName.trim() : existingSeller.storeName,
+      ownerName: data.ownerName !== undefined ? data.ownerName.trim() : existingSeller.ownerName,
+      email: data.email !== undefined ? data.email.trim().toLowerCase() : existingSeller.email,
+      password: data.password !== undefined && data.password.trim() ? data.password.trim() : existingSeller.password,
+      phone: data.phone !== undefined ? data.phone.trim() : existingSeller.phone,
+      location: data.location !== undefined ? data.location.trim() : existingSeller.location,
+      category: data.category !== undefined ? data.category : existingSeller.category,
+      description: data.description !== undefined ? data.description.trim() : existingSeller.description,
+      logo: data.logo !== undefined ? data.logo : existingSeller.logo,
+      coverImage: data.coverImage !== undefined ? data.coverImage : existingSeller.coverImage,
+      isVerified: data.isVerified !== undefined ? data.isVerified : existingSeller.isVerified,
+      status: data.status !== undefined ? data.status : existingSeller.status,
+    };
+
+    // Update matching Store
+    const currentStores = storageService.getStores();
+    let updatedStore: Store | undefined;
+    const storeIdx = currentStores.findIndex((s) => s.id === existingSeller.storeId);
+    if (storeIdx >= 0) {
+      const existingStore = currentStores[storeIdx];
+      updatedStore = {
+        ...existingStore,
+        name: updatedSeller.storeName,
+        phone: updatedSeller.phone,
+        email: updatedSeller.email,
+        location: updatedSeller.location,
+        address: `${updatedSeller.location}, Gelephu Mindfulness City, Bhutan`,
+        category: updatedSeller.category,
+        description: updatedSeller.description || existingStore.description,
+        logo: updatedSeller.logo || existingStore.logo,
+        coverImage: updatedSeller.coverImage || existingStore.coverImage,
+        isVerified: updatedSeller.isVerified,
+        status: updatedSeller.status === 'suspended' ? 'suspended' : 'approved',
+      };
+      storageService.saveStore(updatedStore);
+    }
+
+    // Save seller
+    storageService.saveSeller(updatedSeller);
+
+    // If active seller is this seller, update state
+    if (currentSeller && currentSeller.id === sellerId) {
+      setCurrentSeller(updatedSeller);
+      storageService.setCurrentSeller(updatedSeller);
+    }
+
+    // Sync to Cloud
+    try {
+      const promises: Promise<any>[] = [
+        firestoreService.saveSeller(updatedSeller),
+        supabaseService.saveSeller(updatedSeller),
+      ];
+      if (updatedStore) {
+        promises.push(firestoreService.saveStore(updatedStore));
+        promises.push(supabaseService.saveStore(updatedStore));
+      }
+      await Promise.allSettled(promises);
+    } catch (err) {
+      console.warn('Cloud sync error on updateSellerByAdmin:', err);
+    }
+
+    if (googleSheetsService.isConfigured()) {
+      googleSheetsService.saveSeller(updatedSeller);
+      if (updatedStore) {
+        googleSheetsService.saveStore(updatedStore);
+      }
+    }
+
+    // If store name or verification changed, sync products associated with this store
+    if (existingSeller.storeName !== updatedSeller.storeName || existingSeller.isVerified !== updatedSeller.isVerified) {
+      const allProducts = storageService.getProducts();
+      let prodChanged = false;
+      allProducts.forEach((p) => {
+        if (p.sellerId === existingSeller.storeId) {
+          p.sellerName = updatedSeller.storeName;
+          p.sellerVerified = updatedSeller.isVerified;
+          prodChanged = true;
+          firestoreService.saveProduct(p);
+          supabaseService.saveProduct(p);
+          if (googleSheetsService.isConfigured()) {
+            googleSheetsService.saveProduct(p);
+          }
+        }
+      });
+      if (prodChanged) {
+        storageService.setProducts(allProducts);
+        setProducts(allProducts);
+      }
+    }
+
+    setSellers(storageService.getSellers());
+    setStores(storageService.getStores());
+    showToast(`Merchant "${updatedSeller.storeName}" updated successfully`, 'success');
+    return { success: true, message: 'Seller updated successfully', seller: updatedSeller, store: updatedStore };
+  };
+
   const deleteSellerByAdmin = (sellerId: string) => {
     if (!isAdminAuthenticated) {
       showToast('Access Restricted: Only administrators have rights to delete sellers.', 'error');
@@ -926,11 +1070,15 @@ export const ShopProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     let targetSellerName = productData.sellerName;
     let targetSellerVerified = productData.sellerVerified;
 
-    if (currentSeller) {
+    if (isAdminAuthenticated) {
+      targetSellerId = productData.sellerId || currentSeller?.storeId || stores[0]?.id || 'store-general';
+      targetSellerName = productData.sellerName || currentSeller?.storeName || stores[0]?.name || 'GMC Marketplace';
+      targetSellerVerified = productData.sellerVerified !== undefined ? productData.sellerVerified : true;
+    } else if (currentSeller) {
       targetSellerId = currentSeller.storeId;
       targetSellerName = currentSeller.storeName;
       targetSellerVerified = currentSeller.isVerified;
-    } else if (!isAdminAuthenticated) {
+    } else {
       showToast('Access Restricted: Customers cannot add products. Only registered merchants and administrators have rights to list products.', 'error');
       return null as unknown as Product;
     }
@@ -1376,6 +1524,7 @@ export const ShopProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         sellerRegister,
         sellerLogout,
         addSellerByAdmin,
+        updateSellerByAdmin,
         deleteSellerByAdmin,
         deleteStoreByAdmin,
         isAdminAuthenticated,
