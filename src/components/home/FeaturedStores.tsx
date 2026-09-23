@@ -2,6 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { useShop } from '../../context/ShopContext';
 import { Store } from '../../types';
 import { formatWhatsAppUrl } from '../../utils/whatsapp';
+import { isBlacklistedStoreOrSeller } from '../../services/storageService';
 import {
   CheckCircle2,
   Star,
@@ -27,6 +28,7 @@ export const FeaturedStores: React.FC = () => {
 
     // 1. Add all existing stores
     stores.forEach((store) => {
+      if (isBlacklistedStoreOrSeller(store.id, store.name, store.email)) return;
       // Find matching seller account to enrich with ownerName and contact info
       const matchingSeller = sellers.find(
         (s) =>
@@ -45,6 +47,7 @@ export const FeaturedStores: React.FC = () => {
 
     // 2. Add any sellers from `sellers` that might not have an entry in `stores`
     sellers.forEach((seller) => {
+      if (isBlacklistedStoreOrSeller(seller.id, seller.storeName, seller.email)) return;
       const storeId = seller.storeId || seller.id;
       if (!storeMap.has(storeId)) {
         storeMap.set(storeId, {
@@ -74,6 +77,7 @@ export const FeaturedStores: React.FC = () => {
 
     // 3. Scan products to discover any merchant or seller name not yet indexed
     products.forEach((prod) => {
+      if (isBlacklistedStoreOrSeller(prod.sellerId, prod.sellerName)) return;
       const sellerId = prod.sellerId || `store-${prod.sellerName.toLowerCase().replace(/[^a-z0-9]/g, '-')}`;
       const existing = Array.from(storeMap.values()).find(
         (s) =>

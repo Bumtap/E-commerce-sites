@@ -16,7 +16,7 @@ import {
   Address,
   SellerAccount
 } from '../types';
-import { storageService, DEFAULT_USER } from '../services/storageService';
+import { storageService, DEFAULT_USER, isBlacklistedStoreOrSeller } from '../services/storageService';
 import { supabaseService } from '../services/supabaseService';
 import { firestoreService } from '../services/firestoreService';
 import { googleSheetsService, SheetsSyncResult } from '../services/googleSheetsService';
@@ -364,17 +364,20 @@ export const ShopProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         ]);
 
         if (cloudStores.length > 0) {
-          const mergedStores = mergeById(cloudStores, storageService.getStores());
+          const validStores = cloudStores.filter((s) => !isBlacklistedStoreOrSeller(s.id, s.name, s.email));
+          const mergedStores = mergeById(validStores, storageService.getStores()).filter((s) => !isBlacklistedStoreOrSeller(s.id, s.name, s.email));
           setStores(mergedStores);
           storageService.setStores(mergedStores);
         }
         if (cloudProducts.length > 0) {
-          const mergedProducts = mergeById(cloudProducts, storageService.getProducts());
+          const validProducts = cloudProducts.filter((p) => !isBlacklistedStoreOrSeller(p.sellerId, p.sellerName));
+          const mergedProducts = mergeById(validProducts, storageService.getProducts());
           setProducts(mergedProducts);
           storageService.setProducts(mergedProducts);
         }
         if (cloudSellers.length > 0) {
-          const mergedSellers = mergeById(cloudSellers, storageService.getSellers());
+          const validSellers = cloudSellers.filter((s) => !isBlacklistedStoreOrSeller(s.id, s.storeName, s.email));
+          const mergedSellers = mergeById(validSellers, storageService.getSellers()).filter((s) => !isBlacklistedStoreOrSeller(s.id, s.storeName, s.email));
           setSellers(mergedSellers);
           storageService.setSellers(mergedSellers);
         }
@@ -445,7 +448,8 @@ export const ShopProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     const unsubStores = firestoreService.subscribeStores((cloudStores) => {
       if (cloudStores && cloudStores.length > 0) {
         setStores((prev) => {
-          const merged = mergeById(cloudStores, prev);
+          const valid = cloudStores.filter((s) => !isBlacklistedStoreOrSeller(s.id, s.name, s.email));
+          const merged = mergeById(valid, prev).filter((s) => !isBlacklistedStoreOrSeller(s.id, s.name, s.email));
           storageService.setStores(merged);
           return merged;
         });
@@ -465,7 +469,8 @@ export const ShopProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     const unsubSellers = firestoreService.subscribeSellers((cloudSellers) => {
       if (cloudSellers && cloudSellers.length > 0) {
         setSellers((prev) => {
-          const merged = mergeById(cloudSellers, prev);
+          const valid = cloudSellers.filter((s) => !isBlacklistedStoreOrSeller(s.id, s.storeName, s.email));
+          const merged = mergeById(valid, prev).filter((s) => !isBlacklistedStoreOrSeller(s.id, s.storeName, s.email));
           storageService.setSellers(merged);
           return merged;
         });
@@ -894,6 +899,7 @@ export const ShopProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       if (googleSheetsService.isConfigured()) {
         googleSheetsService.deleteStore(seller.storeId);
       }
+      storageService.deleteStore(seller.storeId);
     }
     firestoreService.deleteSeller(sellerId);
     supabaseService.deleteSeller(sellerId);
@@ -901,8 +907,9 @@ export const ShopProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       googleSheetsService.deleteSeller(sellerId);
     }
     const res = storageService.deleteSeller(sellerId);
+    setSellers(storageService.getSellers());
+    setStores(storageService.getStores());
     if (res.success) {
-      setSellers(storageService.getSellers());
       showToast(res.message, 'info');
     } else {
       showToast(res.message, 'error');
@@ -920,9 +927,22 @@ export const ShopProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     if (googleSheetsService.isConfigured()) {
       googleSheetsService.deleteStore(storeId);
     }
+
+    // Also delete any matching seller account
+    const matchedSeller = sellers.find((s) => s.storeId === storeId || s.id === storeId);
+    if (matchedSeller) {
+      firestoreService.deleteSeller(matchedSeller.id);
+      supabaseService.deleteSeller(matchedSeller.id);
+      if (googleSheetsService.isConfigured()) {
+        googleSheetsService.deleteSeller(matchedSeller.id);
+      }
+      storageService.deleteSeller(matchedSeller.id);
+    }
+
     const res = storageService.deleteStore(storeId);
+    setStores(storageService.getStores());
+    setSellers(storageService.getSellers());
     if (res.success) {
-      setStores(storageService.getStores());
       showToast(res.message, 'info');
     } else {
       showToast(res.message, 'error');

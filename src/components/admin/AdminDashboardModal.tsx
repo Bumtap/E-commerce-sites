@@ -1,10 +1,11 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useShop } from '../../context/ShopContext';
 import { formatNu, formatDateTime } from '../../utils/format';
 import { formatWhatsAppUrl } from '../../utils/whatsapp';
 import { Product, Store, Category, Coupon, DeliveryZone, SellerAccount } from '../../types';
 import { ImageUpload } from '../common/ImageUpload';
 import { GOOGLE_APPS_SCRIPT_CODE } from '../../data/googleAppsScriptCode';
+import { isBlacklistedStoreOrSeller } from '../../services/storageService';
 import {
   X,
   LayoutDashboard,
@@ -165,6 +166,49 @@ export const AdminDashboardModal: React.FC = () => {
   const [activeTab, setActiveTab] = useState<
     'overview' | 'products' | 'stores' | 'categories' | 'coupons' | 'zones' | 'sheets' | 'security'
   >('overview');
+
+  // Comprehensive list of all stores and registered sellers so no merchant is ever missing from the edit panel
+  const allAdminStores = useMemo(() => {
+    const map = new Map<string, Store>();
+
+    // 1. Add all official stores
+    stores.forEach((store) => {
+      if (!isBlacklistedStoreOrSeller(store.id, store.name, store.email)) {
+        map.set(store.id, store);
+      }
+    });
+
+    // 2. Add any sellers that don't have a store record yet
+    sellers.forEach((seller) => {
+      if (isBlacklistedStoreOrSeller(seller.id, seller.storeName, seller.email)) return;
+      const storeId = seller.storeId || seller.id;
+      if (!map.has(storeId)) {
+        map.set(storeId, {
+          id: storeId,
+          name: seller.storeName,
+          slug: seller.storeName.toLowerCase().replace(/[^a-z0-9]+/g, '-'),
+          tagline: `Quality ${seller.category || 'GMC'} goods`,
+          description: seller.description || `${seller.storeName} is a registered merchant in Gelephu Mindfulness City.`,
+          logo: seller.logo || 'https://images.unsplash.com/photo-1544717302-de2939b7ef71?w=150&auto=format&fit=crop&q=80',
+          coverImage: seller.coverImage || 'https://images.unsplash.com/photo-1500937386664-56d1dfef3854?w=1200&auto=format&fit=crop&q=80',
+          category: seller.category || 'General Merchant',
+          location: seller.location || 'GMC Central District, Gelephu',
+          address: `${seller.location || 'GMC Central District'}, Gelephu Mindfulness City, Bhutan`,
+          phone: seller.phone || '+975 17123456',
+          email: seller.email,
+          openingHours: 'Mon - Sat: 8:00 AM - 6:00 PM',
+          rating: 5.0,
+          reviewCount: 0,
+          productCount: 0,
+          isVerified: seller.isVerified ?? true,
+          joinedDate: seller.joinedDate || new Date().toISOString().split('T')[0],
+          status: seller.status === 'suspended' ? 'suspended' : 'approved',
+        });
+      }
+    });
+
+    return Array.from(map.values());
+  }, [stores, sellers]);
 
   // Google Sheets integration state
   const [sheetUrlInput, setSheetUrlInput] = useState(googleSheetsUrl || '');
@@ -1048,8 +1092,8 @@ export const AdminDashboardModal: React.FC = () => {
                     onChange={(e) => setProductSellerFilter(e.target.value)}
                     className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white outline-hidden focus:ring-2 focus:ring-teal-700 cursor-pointer"
                   >
-                    <option value="all">All Merchants ({stores.length})</option>
-                    {stores.map((s) => (
+                    <option value="all">All Merchants ({allAdminStores.length})</option>
+                    {allAdminStores.map((s) => (
                       <option key={s.id} value={s.id}>
                         {s.name}
                       </option>
@@ -1205,7 +1249,7 @@ export const AdminDashboardModal: React.FC = () => {
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-2 border-b border-slate-200 dark:border-slate-800">
                 <div>
                   <h4 className="font-bold text-sm text-slate-900 dark:text-white">
-                    GMC Registered Businesses & Cooperatives ({stores.length})
+                    GMC Registered Businesses & Cooperatives ({allAdminStores.length})
                   </h4>
                   <p className="text-xs text-slate-500 dark:text-slate-400">
                     Onboard new merchants, edit store profiles, manage verification credentials, or contact owners.
@@ -1250,7 +1294,7 @@ export const AdminDashboardModal: React.FC = () => {
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                {stores
+                {allAdminStores
                   .filter((s) => {
                     const matchesSearch =
                       s.name.toLowerCase().includes(sellerSearch.toLowerCase()) ||

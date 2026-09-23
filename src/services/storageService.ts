@@ -152,6 +152,24 @@ export const DEFAULT_USER: UserProfile = {
   ],
 };
 
+// Blacklisted/permanently removed test stores and sellers
+export function isBlacklistedStoreOrSeller(id?: string, name?: string, email?: string): boolean {
+  const normId = (id || '').toLowerCase().trim();
+  const normName = (name || '').toLowerCase().trim();
+  const normEmail = (email || '').toLowerCase().trim();
+
+  return (
+    normName.includes('himalayan high herbal tea') ||
+    normName.includes('druk artisan wood & metal') ||
+    normId === 'seller-tea' ||
+    normId === 'seller-handicrafts' ||
+    normId === 'store-bhutan-tea' ||
+    normId === 'store-druk-handicrafts' ||
+    normEmail === 'order@bhutantea.bt' ||
+    normEmail === 'art@drukcrafts.bt'
+  );
+}
+
 class StorageService {
   private get<T>(key: string, fallback: T): T {
     try {
@@ -228,11 +246,17 @@ class StorageService {
 
   // --- Stores ---
   getStores(): Store[] {
-    return this.get<Store[]>(STORAGE_KEYS.STORES, INITIAL_STORES);
+    const stores = this.get<Store[]>(STORAGE_KEYS.STORES, INITIAL_STORES);
+    const filtered = stores.filter((s) => !isBlacklistedStoreOrSeller(s.id, s.name, s.email));
+    if (filtered.length !== stores.length) {
+      this.set(STORAGE_KEYS.STORES, filtered);
+    }
+    return filtered;
   }
 
   setStores(stores: Store[]): void {
-    this.set(STORAGE_KEYS.STORES, stores);
+    const filtered = stores.filter((s) => !isBlacklistedStoreOrSeller(s.id, s.name, s.email));
+    this.set(STORAGE_KEYS.STORES, filtered);
   }
 
   saveStore(store: Store): void {
@@ -474,14 +498,21 @@ class StorageService {
 
   // --- Seller Authentication & Profiles ---
   getSellers(): SellerAccount[] {
-    return this.get<SellerAccount[]>(STORAGE_KEYS.SELLERS, DEFAULT_SELLERS);
+    const sellers = this.get<SellerAccount[]>(STORAGE_KEYS.SELLERS, DEFAULT_SELLERS);
+    const filtered = sellers.filter((s) => !isBlacklistedStoreOrSeller(s.id, s.storeName, s.email));
+    if (filtered.length !== sellers.length) {
+      this.set(STORAGE_KEYS.SELLERS, filtered);
+    }
+    return filtered;
   }
 
   setSellers(sellers: SellerAccount[]): void {
-    this.set(STORAGE_KEYS.SELLERS, sellers);
+    const filtered = sellers.filter((s) => !isBlacklistedStoreOrSeller(s.id, s.storeName, s.email));
+    this.set(STORAGE_KEYS.SELLERS, filtered);
   }
 
   saveSeller(seller: SellerAccount): void {
+    if (isBlacklistedStoreOrSeller(seller.id, seller.storeName, seller.email)) return;
     const sellers = this.getSellers();
     const index = sellers.findIndex((s) => s.id === seller.id || s.email.toLowerCase() === seller.email.toLowerCase());
     if (index >= 0) {
@@ -586,27 +617,42 @@ class StorageService {
   deleteSeller(sellerId: string): { success: boolean; message: string } {
     const sellers = this.getSellers();
     const toDelete = sellers.find((s) => s.id === sellerId);
-    if (!toDelete) return { success: false, message: 'Seller not found' };
     
-    const updated = sellers.filter((s) => s.id !== sellerId);
-    this.set(STORAGE_KEYS.SELLERS, updated);
+    const updatedSellers = sellers.filter((s) => s.id !== sellerId);
+    this.set(STORAGE_KEYS.SELLERS, updatedSellers);
+
+    // Also remove any corresponding store
+    if (toDelete?.storeId) {
+      const stores = this.getStores();
+      const updatedStores = stores.filter((s) => s.id !== toDelete.storeId && s.id !== sellerId);
+      if (updatedStores.length !== stores.length) {
+        this.set(STORAGE_KEYS.STORES, updatedStores);
+      }
+    }
 
     // If active seller was deleted, logout
     const current = this.getCurrentSeller();
-    if (current && current.id === sellerId) {
+    if (current && (current.id === sellerId || current.storeId === toDelete?.storeId)) {
       this.logoutSeller();
     }
-    return { success: true, message: `Seller ${toDelete.storeName} removed` };
+    return { success: true, message: `Seller ${toDelete ? toDelete.storeName : sellerId} removed` };
   }
 
   deleteStore(storeId: string): { success: boolean; message: string } {
     const stores = this.getStores();
     const toDelete = stores.find((s) => s.id === storeId);
-    if (!toDelete) return { success: false, message: 'Store not found' };
 
-    const updated = stores.filter((s) => s.id !== storeId);
-    this.set(STORAGE_KEYS.STORES, updated);
-    return { success: true, message: `Store ${toDelete.name} removed` };
+    const updatedStores = stores.filter((s) => s.id !== storeId);
+    this.set(STORAGE_KEYS.STORES, updatedStores);
+
+    // Also remove any matching seller account associated with this store
+    const sellers = this.getSellers();
+    const updatedSellers = sellers.filter((s) => s.storeId !== storeId && s.id !== storeId);
+    if (updatedSellers.length !== sellers.length) {
+      this.set(STORAGE_KEYS.SELLERS, updatedSellers);
+    }
+
+    return { success: true, message: `Store ${toDelete ? toDelete.name : storeId} removed` };
   }
 
   authenticateSeller(emailOrHandle: string, password: string): { success: boolean; message: string; seller?: SellerAccount } {
@@ -618,20 +664,15 @@ class StorageService {
       'farm': 'contact@gmcorganic.bt',
       'organic': 'contact@gmcorganic.bt',
       'farm@gelephu.bt': 'contact@gmcorganic.bt',
-      'textiles': 'sales@khandrotex.bt',
-      'weaving': 'sales@khandrotex.bt',
-      'textiles@gelephu.bt': 'sales@khandrotex.bt',
-      'honey': 'info@sarpanghoney.bt',
-      'apiary': 'info@sarpanghoney.bt',
-      'honey@gelephu.bt': 'info@sarpanghoney.bt',
-      'tea': 'order@bhutantea.bt',
-      'herbs': 'order@bhutantea.bt',
-      'tea@gelephu.bt': 'order@bhutantea.bt',
-      'herbs@gelephu.bt': 'order@bhutantea.bt',
-      'crafts': 'art@drukcrafts.bt',
-      'handicrafts': 'art@drukcrafts.bt',
-      'crafts@gelephu.bt': 'art@drukcrafts.bt',
-      'handicrafts@gelephu.bt': 'art@drukcrafts.bt',
+      'textiles': 'weavers@gelephutextiles.bt',
+      'weaving': 'weavers@gelephutextiles.bt',
+      'textiles@gelephu.bt': 'weavers@gelephutextiles.bt',
+      'honey': 'honey@himalayanbee.bt',
+      'apiary': 'honey@himalayanbee.bt',
+      'honey@gelephu.bt': 'honey@himalayanbee.bt',
+      'herbal': 'info@drukherbal.bt',
+      'wellness': 'info@drukherbal.bt',
+      'tech': 'tech@mindfultech.bt',
     };
 
     const targetEmail = aliasMap[query] || query;
