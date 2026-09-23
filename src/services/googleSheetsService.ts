@@ -10,6 +10,53 @@ export interface SheetsSyncResult {
   data?: any;
 }
 
+// Google Sheets cell character limit is strictly 50,000 characters
+const MAX_CELL_LENGTH = 45000;
+
+function sanitizeValueForSheets(val: any): any {
+  if (val === undefined || val === null) return '';
+  if (typeof val === 'string') {
+    if (val.length > MAX_CELL_LENGTH) {
+      if (val.startsWith('data:image/')) {
+        return val.substring(0, MAX_CELL_LENGTH - 60) + '...[truncated]';
+      }
+      return val.substring(0, MAX_CELL_LENGTH - 60) + '...[truncated]';
+    }
+    return val;
+  }
+  if (Array.isArray(val)) {
+    // If it's an array of strings (like product images), sanitize each item
+    const sanitizedArr = val.map((item) => sanitizeValueForSheets(item));
+    const str = JSON.stringify(sanitizedArr);
+    if (str.length > MAX_CELL_LENGTH) {
+      // If the array string still exceeds 45,000 chars, keep only the first few items
+      return sanitizedArr.slice(0, 2);
+    }
+    return sanitizedArr;
+  }
+  if (typeof val === 'object') {
+    const str = JSON.stringify(val);
+    if (str.length > MAX_CELL_LENGTH) {
+      const sanitizedObj: Record<string, any> = {};
+      for (const [k, v] of Object.entries(val)) {
+        sanitizedObj[k] = sanitizeValueForSheets(v);
+      }
+      return sanitizedObj;
+    }
+    return val;
+  }
+  return val;
+}
+
+function sanitizeRecordForSheets<T extends Record<string, any>>(record: T): T {
+  if (!record || typeof record !== 'object') return record;
+  const result: any = {};
+  for (const [key, value] of Object.entries(record)) {
+    result[key] = sanitizeValueForSheets(value);
+  }
+  return result;
+}
+
 class GoogleSheetsService {
   private getEndpoint(): string {
     const customUrl = localStorage.getItem(SHEETS_URL_KEY);
@@ -50,18 +97,44 @@ class GoogleSheetsService {
     try {
       const target = endpoint.includes('?') ? `${endpoint}&action=ping` : `${endpoint}?action=ping`;
       const res = await fetch(target, { method: 'GET', redirect: 'follow' });
-      if (!res.ok) {
-        return { success: false, message: `HTTP status ${res.status}: Failed to reach Google Sheet script.` };
+      const text = await res.text();
+
+      let data: any = null;
+      try {
+        data = JSON.parse(text);
+      } catch (jsonErr) {
+        if (text.trim().startsWith('<') || text.includes('<!DOCTYPE')) {
+          if (text.includes('accounts.google.com') || text.includes('ServiceLogin') || text.includes('Sign in')) {
+            return {
+              success: false,
+              message:
+                'Access Denied by Google: Your Apps Script Web App is set to "Only myself". In Apps Script, click Deploy > Manage deployments > Edit > set "Who has access" to "Anyone" and create a New Version.',
+            };
+          }
+          if (text.includes('Sorry, unable to open the file') || text.includes('Page not found')) {
+            return {
+              success: false,
+              message:
+                'Google Drive Session Conflict: Multiple Google accounts are active in this browser, or "Who has access" is not set to "Anyone". Try opening in an Incognito window or re-deploying with "Anyone".',
+            };
+          }
+          return {
+            success: false,
+            message:
+              'Google Apps Script returned an HTML page. Ensure your Web App is deployed with "Execute as: Me" and "Who has access: Anyone".',
+          };
+        }
+        return { success: false, message: 'Invalid response format from Google Apps Script.' };
       }
-      const data = await res.json();
-      if (data.status === 'success' || data.success) {
+
+      if (data && (data.status === 'success' || data.success)) {
         return {
           success: true,
           message: data.message || 'Connected to Google Sheet successfully!',
           data,
         };
       }
-      return { success: false, message: data.message || 'Script responded with an error.' };
+      return { success: false, message: data?.message || 'Script responded with an error.' };
     } catch (err: any) {
       return {
         success: false,
@@ -86,7 +159,15 @@ class GoogleSheetsService {
       const res = await fetch(target, { method: 'GET', redirect: 'follow' });
       if (!res.ok) return {};
 
-      const json = await res.json();
+      const text = await res.text();
+      let json: any = null;
+      try {
+        json = JSON.parse(text);
+      } catch (e) {
+        console.warn('Google Sheets fetchAll received non-JSON (likely HTML auth page):', text.slice(0, 100));
+        return {};
+      }
+
       if (json && (json.status === 'success' || json.success)) {
         if (json.data) return json.data;
         return {
@@ -110,11 +191,12 @@ class GoogleSheetsService {
 
     try {
       const endpoint = this.getEndpoint();
+      const sanitizedPayload = sanitizeRecordForSheets(payload);
       // Package payload both at top-level and in nested .payload for broad script compatibility
       const body = {
         action,
-        ...payload,
-        payload,
+        ...sanitizedPayload,
+        payload: sanitizedPayload,
       };
 
       // Using text/plain prevents CORS preflight OPTIONS rejection in Google Apps Script
@@ -180,13 +262,23 @@ class GoogleSheetsService {
 
     try {
       const endpoint = this.getEndpoint();
+      const sanitizedStores = data.stores.map(sanitizeRecordForSheets);
+      const sanitizedProducts = data.products.map(sanitizeRecordForSheets);
+      const sanitizedSellers = data.sellers.map(sanitizeRecordForSheets);
+      const sanitizedCategories = data.categories.map(sanitizeRecordForSheets);
+
       const body = {
         action: 'syncAll',
-        stores: data.stores,
-        products: data.products,
-        sellers: data.sellers,
-        categories: data.categories,
-        payload: data,
+        stores: sanitizedStores,
+        products: sanitizedProducts,
+        sellers: sanitizedSellers,
+        categories: sanitizedCategories,
+        payload: {
+          stores: sanitizedStores,
+          products: sanitizedProducts,
+          sellers: sanitizedSellers,
+          categories: sanitizedCategories,
+        },
       };
 
       const res = await fetch(endpoint, {
@@ -196,14 +288,41 @@ class GoogleSheetsService {
         body: JSON.stringify(body),
       });
 
-      const resData = await res.json();
-      if (resData.status === 'success' || resData.success) {
+      const text = await res.text();
+      let resData: any = null;
+      try {
+        resData = JSON.parse(text);
+      } catch (jsonErr) {
+        if (text.trim().startsWith('<') || text.includes('<!DOCTYPE')) {
+          if (text.includes('accounts.google.com') || text.includes('ServiceLogin') || text.includes('Sign in')) {
+            return {
+              success: false,
+              message:
+                'Access Denied by Google: Your Apps Script Web App was deployed without public access. In Apps Script, click Deploy > Manage deployments > Edit > set "Who has access" to "Anyone" and create a New Version.',
+            };
+          }
+          if (text.includes('Sorry, unable to open the file') || text.includes('Page not found')) {
+            return {
+              success: false,
+              message:
+                'Google Drive Access Conflict: Multiple Google accounts are active in this browser, or "Who has access" is not set to "Anyone". Try opening in an Incognito window or re-deploying with "Anyone".',
+            };
+          }
+          return {
+            success: false,
+            message:
+              'Google Apps Script returned an HTML page. Ensure your Web App is deployed with "Execute as: Me" and "Who has access: Anyone".',
+          };
+        }
+      }
+
+      if (resData && (resData.status === 'success' || resData.success)) {
         return {
           success: true,
           message: resData.message || 'All stores, products, sellers, and categories synced to Google Sheets!',
         };
       }
-      return { success: false, message: resData.message || 'Sheet sync failed.' };
+      return { success: false, message: resData?.message || 'Sheet sync failed.' };
     } catch (err: any) {
       return { success: false, message: `Sync error: ${err.message || 'Unknown network error'}` };
     }

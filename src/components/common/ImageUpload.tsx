@@ -43,7 +43,44 @@ export const ImageUpload: React.FC<ImageUploadProps> = ({
     const reader = new FileReader();
     reader.onload = () => {
       if (typeof reader.result === 'string') {
-        onChange(reader.result);
+        const rawData = reader.result;
+        // Keep SVGs untouched
+        if (file.type === 'image/svg+xml') {
+          onChange(rawData);
+          return;
+        }
+
+        // Optimize raster images using Canvas to stay safely below 35KB (Google Sheets 50,000 char limit)
+        const img = new Image();
+        img.onload = () => {
+          const maxDim = variant === 'logo' ? 400 : 700;
+          let width = img.width;
+          let height = img.height;
+          if (width > maxDim || height > maxDim) {
+            if (width > height) {
+              height = Math.round((height * maxDim) / width);
+              width = maxDim;
+            } else {
+              width = Math.round((width * maxDim) / height);
+              height = maxDim;
+            }
+          }
+          const canvas = document.createElement('canvas');
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext('2d');
+          if (ctx) {
+            ctx.drawImage(img, 0, 0, width, height);
+            const optimized = canvas.toDataURL('image/jpeg', 0.8);
+            onChange(optimized);
+          } else {
+            onChange(rawData);
+          }
+        };
+        img.onerror = () => {
+          onChange(rawData);
+        };
+        img.src = rawData;
       }
     };
     reader.onerror = () => {

@@ -178,69 +178,83 @@ function doPost(e) {
     initAllSheets();
 
     if (action === 'syncAll') {
-      if (payload.stores) writeEntireSheet(ss, 'Stores', payload.stores);
-      if (payload.products) writeEntireSheet(ss, 'Products', payload.products);
-      if (payload.sellers) writeEntireSheet(ss, 'Sellers', payload.sellers);
-      if (payload.categories) writeEntireSheet(ss, 'Categories', payload.categories);
+      var stores = body.stores || payload.stores;
+      var products = body.products || payload.products;
+      var sellers = body.sellers || payload.sellers;
+      var categories = body.categories || payload.categories;
+
+      if (stores) writeEntireSheet(ss, 'Stores', stores);
+      if (products) writeEntireSheet(ss, 'Products', products);
+      if (sellers) writeEntireSheet(ss, 'Sellers', sellers);
+      if (categories) writeEntireSheet(ss, 'Categories', categories);
       return createJsonResponse({
         status: 'success',
+        success: true,
         message: 'Successfully synchronized all marketplace data to Google Sheets!'
       });
     }
 
     if (action === 'saveStore') {
-      upsertRecord(ss, 'Stores', payload);
-      return createJsonResponse({ status: 'success', message: 'Store saved' });
+      var storeItem = body.store || payload.store || payload;
+      upsertRecord(ss, 'Stores', storeItem);
+      return createJsonResponse({ status: 'success', success: true, message: 'Store saved' });
     }
 
     if (action === 'deleteStore') {
-      deleteRecord(ss, 'Stores', payload.id);
-      return createJsonResponse({ status: 'success', message: 'Store deleted' });
+      var storeId = body.storeId || payload.storeId || body.id || payload.id;
+      deleteRecord(ss, 'Stores', storeId);
+      return createJsonResponse({ status: 'success', success: true, message: 'Store deleted' });
     }
 
     if (action === 'saveProduct') {
-      upsertRecord(ss, 'Products', payload);
-      return createJsonResponse({ status: 'success', message: 'Product saved' });
+      var productItem = body.product || payload.product || payload;
+      upsertRecord(ss, 'Products', productItem);
+      return createJsonResponse({ status: 'success', success: true, message: 'Product saved' });
     }
 
     if (action === 'deleteProduct') {
-      deleteRecord(ss, 'Products', payload.id);
-      return createJsonResponse({ status: 'success', message: 'Product deleted' });
+      var productId = body.productId || payload.productId || body.id || payload.id;
+      deleteRecord(ss, 'Products', productId);
+      return createJsonResponse({ status: 'success', success: true, message: 'Product deleted' });
     }
 
     if (action === 'saveSeller') {
-      upsertRecord(ss, 'Sellers', payload);
-      return createJsonResponse({ status: 'success', message: 'Seller saved' });
+      var sellerItem = body.seller || payload.seller || payload;
+      upsertRecord(ss, 'Sellers', sellerItem);
+      return createJsonResponse({ status: 'success', success: true, message: 'Seller saved' });
     }
 
     if (action === 'deleteSeller') {
-      deleteRecord(ss, 'Sellers', payload.id);
-      return createJsonResponse({ status: 'success', message: 'Seller deleted' });
+      var sellerId = body.sellerId || payload.sellerId || body.id || payload.id;
+      deleteRecord(ss, 'Sellers', sellerId);
+      return createJsonResponse({ status: 'success', success: true, message: 'Seller deleted' });
     }
 
     if (action === 'saveCategory') {
-      upsertRecord(ss, 'Categories', payload);
-      return createJsonResponse({ status: 'success', message: 'Category saved' });
+      var categoryItem = body.category || payload.category || payload;
+      upsertRecord(ss, 'Categories', categoryItem);
+      return createJsonResponse({ status: 'success', success: true, message: 'Category saved' });
     }
 
     if (action === 'deleteCategory') {
-      deleteRecord(ss, 'Categories', payload.id);
-      return createJsonResponse({ status: 'success', message: 'Category deleted' });
+      var categoryId = body.categoryId || payload.categoryId || body.id || payload.id;
+      deleteRecord(ss, 'Categories', categoryId);
+      return createJsonResponse({ status: 'success', success: true, message: 'Category deleted' });
     }
 
     if (action === 'saveOrder') {
-      // Format orders for easy human reading in the spreadsheet
-      var flatOrder = Object.assign({}, payload);
+      var orderItem = body.order || payload.order || payload;
+      var flatOrder = Object.assign({}, orderItem);
       if (flatOrder.shippingAddress && typeof flatOrder.shippingAddress === 'object') {
-        flatOrder.shippingAddress = flatOrder.shippingAddress.addressLine + ', ' + flatOrder.shippingAddress.city;
+        flatOrder.shippingAddress = flatOrder.shippingAddress.addressLine + ', ' + (flatOrder.shippingAddress.city || '');
       }
       if (flatOrder.items && Array.isArray(flatOrder.items)) {
         flatOrder.itemsSummary = flatOrder.items.map(function(i) {
-          return i.quantity + 'x ' + i.name + ' (Nu. ' + (i.price * i.quantity) + ')';
+          return (i.quantity || 1) + 'x ' + (i.name || i.productName || 'Item') + ' (Nu. ' + ((i.price || 0) * (i.quantity || 1)) + ')';
         }).join(' | ');
       }
       upsertRecord(ss, 'Orders', flatOrder);
-      return createJsonResponse({ status: 'success', message: 'Order recorded' });
+      return createJsonResponse({ status: 'success', success: true, message: 'Order recorded' });
     }
 
     return createJsonResponse({ status: 'error', message: 'Unknown POST action: ' + action });
@@ -280,6 +294,25 @@ function readSheetData(ss, sheetName) {
   });
 }
 
+// Safeguards against Google Sheets 50,000 characters per single cell hard limit
+function safeCellValue(val) {
+  if (val === undefined || val === null) return '';
+  if (typeof val === 'object') {
+    try {
+      val = JSON.stringify(val);
+    } catch (e) {
+      val = String(val);
+    }
+  } else {
+    val = String(val);
+  }
+  // Hard cap to 48,000 characters to safely prevent "more than maximum of 50000 characters" error
+  if (val.length > 48000) {
+    return val.substring(0, 48000) + '... [truncated: 50,000 char cell limit]';
+  }
+  return val;
+}
+
 function upsertRecord(ss, sheetName, item) {
   var sheet = ss.getSheetByName(sheetName);
   if (!sheet) return;
@@ -304,10 +337,7 @@ function upsertRecord(ss, sheetName, item) {
   }
 
   var rowData = headers.map(function(header) {
-    var val = item[header];
-    if (val === undefined || val === null) return '';
-    if (typeof val === 'object') return JSON.stringify(val);
-    return val;
+    return safeCellValue(item[header]);
   });
 
   if (existingRowIndex > 0) {
@@ -350,10 +380,7 @@ function writeEntireSheet(ss, sheetName, items) {
 
   var rowsData = items.map(function(item) {
     return headers.map(function(header) {
-      var val = item[header];
-      if (val === undefined || val === null) return '';
-      if (typeof val === 'object') return JSON.stringify(val);
-      return val;
+      return safeCellValue(item[header]);
     });
   });
 
