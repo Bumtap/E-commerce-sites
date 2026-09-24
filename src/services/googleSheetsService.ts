@@ -13,14 +13,25 @@ export interface SheetsSyncResult {
 // Google Sheets cell character limit is strictly 50,000 characters
 const MAX_CELL_LENGTH = 45000;
 
+export function isCorruptedOrTruncatedImage(url?: string): boolean {
+  if (!url || typeof url !== 'string') return true;
+  if (url.includes('[truncated]') || url.includes('...[') || url.includes('truncated:') || url.includes('[Cloud')) {
+    return true;
+  }
+  if (url.startsWith('data:image/') && url.length < 80) return true;
+  return false;
+}
+
 function sanitizeValueForSheets(val: any): any {
   if (val === undefined || val === null) return '';
   if (typeof val === 'string') {
     if (val.length > MAX_CELL_LENGTH) {
       if (val.startsWith('data:image/')) {
-        return val.substring(0, MAX_CELL_LENGTH - 60) + '...[truncated]';
+        // Never append [truncated] to image data URLs - a broken data URL will fail to render.
+        // Instead store a clean reference flag that image is stored in Firestore
+        return '[Cloud Firestore Image]';
       }
-      return val.substring(0, MAX_CELL_LENGTH - 60) + '...[truncated]';
+      return val.substring(0, MAX_CELL_LENGTH - 60);
     }
     return val;
   }
@@ -29,8 +40,8 @@ function sanitizeValueForSheets(val: any): any {
     const sanitizedArr = val.map((item) => sanitizeValueForSheets(item));
     const str = JSON.stringify(sanitizedArr);
     if (str.length > MAX_CELL_LENGTH) {
-      // If the array string still exceeds 45,000 chars, keep only the first few items
-      return sanitizedArr.slice(0, 2);
+      // If the array string still exceeds 45,000 chars, keep only the first item
+      return sanitizedArr.slice(0, 1);
     }
     return sanitizedArr;
   }
@@ -55,6 +66,30 @@ function sanitizeRecordForSheets<T extends Record<string, any>>(record: T): T {
     result[key] = sanitizeValueForSheets(value);
   }
   return result;
+}
+
+function cleanSheetsProduct(p: any): Product {
+  const images = Array.isArray(p.images)
+    ? p.images.filter((img: any) => typeof img === 'string' && !isCorruptedOrTruncatedImage(img))
+    : typeof p.images === 'string' && !isCorruptedOrTruncatedImage(p.images)
+    ? [p.images]
+    : [];
+
+  return {
+    ...p,
+    images: images.length > 0 ? images : [],
+    price: Number(p.price || 0),
+    salePrice: p.salePrice ? Number(p.salePrice) : undefined,
+    stock: Number(p.stock ?? 10),
+  };
+}
+
+function cleanSheetsStore(s: any): Store {
+  return {
+    ...s,
+    logo: isCorruptedOrTruncatedImage(s.logo) ? '' : s.logo,
+    coverImage: isCorruptedOrTruncatedImage(s.coverImage) ? '' : s.coverImage,
+  };
 }
 
 class GoogleSheetsService {
@@ -169,13 +204,13 @@ class GoogleSheetsService {
       }
 
       if (json && (json.status === 'success' || json.success)) {
-        if (json.data) return json.data;
+        const raw = json.data || json;
         return {
-          stores: json.stores || [],
-          products: json.products || [],
-          sellers: json.sellers || [],
-          orders: json.orders || [],
-          categories: json.categories || [],
+          stores: (raw.stores || []).map(cleanSheetsStore),
+          products: (raw.products || []).map(cleanSheetsProduct),
+          sellers: raw.sellers || [],
+          orders: raw.orders || [],
+          categories: raw.categories || [],
         };
       }
       return {};

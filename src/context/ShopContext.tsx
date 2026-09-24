@@ -19,9 +19,71 @@ import {
 import { storageService, DEFAULT_USER, isBlacklistedStoreOrSeller } from '../services/storageService';
 import { supabaseService } from '../services/supabaseService';
 import { firestoreService } from '../services/firestoreService';
-import { googleSheetsService, SheetsSyncResult } from '../services/googleSheetsService';
+import { googleSheetsService, SheetsSyncResult, isCorruptedOrTruncatedImage } from '../services/googleSheetsService';
 
-// Utility helper to merge cloud arrays with local arrays without losing newly added items
+// Smart product merger that strictly preserves valid images against truncated or empty strings
+const mergeProducts = (primary: Product[], fallback: Product[]): Product[] => {
+  const map = new Map<string, Product>();
+  (fallback || []).forEach((item) => {
+    if (item && item.id) map.set(item.id, item);
+  });
+  (primary || []).forEach((item) => {
+    if (!item || !item.id) return;
+    const existing = map.get(item.id);
+    if (existing) {
+      const existingHasValidImg = existing.images && existing.images[0] && !isCorruptedOrTruncatedImage(existing.images[0]);
+      const incomingHasValidImg = item.images && item.images[0] && !isCorruptedOrTruncatedImage(item.images[0]);
+
+      let chosenImages = item.images;
+      if (!incomingHasValidImg && existingHasValidImg) {
+        chosenImages = existing.images;
+      } else if (!chosenImages || chosenImages.length === 0) {
+        chosenImages = existing.images;
+      }
+
+      map.set(item.id, {
+        ...existing,
+        ...item,
+        images: chosenImages,
+      });
+    } else {
+      map.set(item.id, item);
+    }
+  });
+  return Array.from(map.values());
+};
+
+// Smart store merger that preserves store logos and covers against corrupted sync strings
+const mergeStores = (primary: Store[], fallback: Store[]): Store[] => {
+  const map = new Map<string, Store>();
+  (fallback || []).forEach((item) => {
+    if (item && item.id) map.set(item.id, item);
+  });
+  (primary || []).forEach((item) => {
+    if (!item || !item.id) return;
+    const existing = map.get(item.id);
+    if (existing) {
+      const validLogo = !isCorruptedOrTruncatedImage(item.logo)
+        ? item.logo
+        : (!isCorruptedOrTruncatedImage(existing.logo) ? existing.logo : item.logo);
+      const validCover = !isCorruptedOrTruncatedImage(item.coverImage)
+        ? item.coverImage
+        : (!isCorruptedOrTruncatedImage(existing.coverImage) ? existing.coverImage : item.coverImage);
+
+      map.set(item.id, {
+        ...existing,
+        ...item,
+        logo: validLogo,
+        coverImage: validCover,
+      });
+    } else {
+      map.set(item.id, item);
+    }
+  });
+  return Array.from(map.values());
+};
+
+// Generic utility helper to merge cloud arrays with local arrays without losing newly added items
 const mergeById = <T extends { id: string }>(primary: T[], fallback: T[]): T[] => {
   const map = new Map<string, T>();
   (fallback || []).forEach((item) => {
@@ -365,13 +427,13 @@ export const ShopProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
         if (cloudStores.length > 0) {
           const validStores = cloudStores.filter((s) => !isBlacklistedStoreOrSeller(s.id, s.name, s.email));
-          const mergedStores = mergeById(validStores, storageService.getStores()).filter((s) => !isBlacklistedStoreOrSeller(s.id, s.name, s.email));
+          const mergedStores = mergeStores(validStores, storageService.getStores()).filter((s) => !isBlacklistedStoreOrSeller(s.id, s.name, s.email));
           setStores(mergedStores);
           storageService.setStores(mergedStores);
         }
         if (cloudProducts.length > 0) {
           const validProducts = cloudProducts.filter((p) => !isBlacklistedStoreOrSeller(p.sellerId, p.sellerName));
-          const mergedProducts = mergeById(validProducts, storageService.getProducts());
+          const mergedProducts = mergeProducts(validProducts, storageService.getProducts());
           setProducts(mergedProducts);
           storageService.setProducts(mergedProducts);
         }
@@ -398,14 +460,14 @@ export const ShopProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             const sheetsData = await googleSheetsService.fetchAll();
             if (sheetsData.stores && sheetsData.stores.length > 0) {
               setStores((prev) => {
-                const merged = mergeById(sheetsData.stores!, prev);
+                const merged = mergeStores(sheetsData.stores!, prev);
                 storageService.setStores(merged);
                 return merged;
               });
             }
             if (sheetsData.products && sheetsData.products.length > 0) {
               setProducts((prev) => {
-                const merged = mergeById(sheetsData.products!, prev);
+                const merged = mergeProducts(sheetsData.products!, prev);
                 storageService.setProducts(merged);
                 return merged;
               });
@@ -438,7 +500,7 @@ export const ShopProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     const unsubProducts = firestoreService.subscribeProducts((cloudProducts) => {
       if (cloudProducts && cloudProducts.length > 0) {
         setProducts((prev) => {
-          const merged = mergeById(cloudProducts, prev);
+          const merged = mergeProducts(cloudProducts, prev);
           storageService.setProducts(merged);
           return merged;
         });
@@ -449,7 +511,7 @@ export const ShopProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       if (cloudStores && cloudStores.length > 0) {
         setStores((prev) => {
           const valid = cloudStores.filter((s) => !isBlacklistedStoreOrSeller(s.id, s.name, s.email));
-          const merged = mergeById(valid, prev).filter((s) => !isBlacklistedStoreOrSeller(s.id, s.name, s.email));
+          const merged = mergeStores(valid, prev).filter((s) => !isBlacklistedStoreOrSeller(s.id, s.name, s.email));
           storageService.setStores(merged);
           return merged;
         });
@@ -490,12 +552,12 @@ export const ShopProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     // Secondary Supabase listeners for backup
     const unsubSubaProducts = supabaseService.subscribeProducts((cloudProducts) => {
       if (cloudProducts && cloudProducts.length > 0) {
-        setProducts((prev) => mergeById(cloudProducts, prev));
+        setProducts((prev) => mergeProducts(cloudProducts, prev));
       }
     });
     const unsubSubaStores = supabaseService.subscribeStores((cloudStores) => {
       if (cloudStores && cloudStores.length > 0) {
-        setStores((prev) => mergeById(cloudStores, prev));
+        setStores((prev) => mergeStores(cloudStores, prev));
       }
     });
 

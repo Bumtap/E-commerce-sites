@@ -52,10 +52,10 @@ export const ImageUpload: React.FC<ImageUploadProps> = ({
           return;
         }
 
-        // Optimize raster images using Canvas to stay safely below 40KB for database sync
+        // Optimize raster images using Canvas to stay safely below 35KB for database & sheets sync
         const img = new Image();
         img.onload = () => {
-          const maxDim = variant === 'logo' ? 400 : 700;
+          const maxDim = variant === 'logo' ? 300 : variant === 'cover' ? 600 : 500;
           let width = img.width;
           let height = img.height;
           if (width > maxDim || height > maxDim) {
@@ -73,7 +73,14 @@ export const ImageUpload: React.FC<ImageUploadProps> = ({
           const ctx = canvas.getContext('2d');
           if (ctx) {
             ctx.drawImage(img, 0, 0, width, height);
-            const optimized = canvas.toDataURL('image/jpeg', 0.82);
+            let optimized = canvas.toDataURL('image/jpeg', 0.78);
+            // Guarantee string length is safely under Google Sheets 45,000 char cell limit and localStorage limits
+            if (optimized.length > 40000) {
+              optimized = canvas.toDataURL('image/jpeg', 0.65);
+            }
+            if (optimized.length > 40000) {
+              optimized = canvas.toDataURL('image/jpeg', 0.52);
+            }
             onChange(optimized);
           } else {
             onChange(rawData);

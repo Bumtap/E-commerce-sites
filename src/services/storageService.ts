@@ -190,11 +190,57 @@ class StorageService {
 
   // --- Products ---
   getProducts(): Product[] {
-    return this.get<Product[]>(STORAGE_KEYS.PRODUCTS, INITIAL_PRODUCTS);
+    const raw = this.get<Product[]>(STORAGE_KEYS.PRODUCTS, INITIAL_PRODUCTS);
+    let changed = false;
+
+    const cleaned = (raw || []).map((prod) => {
+      const initialMatch = INITIAL_PRODUCTS.find((ip) => ip.id === prod.id);
+      const isCorrupt = !prod.images || !prod.images[0] || 
+        typeof prod.images[0] !== 'string' || 
+        prod.images[0].includes('[truncated]') || 
+        prod.images[0].includes('...[') ||
+        prod.images[0].includes('[Cloud');
+
+      if (isCorrupt) {
+        changed = true;
+        if (initialMatch && initialMatch.images && initialMatch.images.length > 0) {
+          return { ...prod, images: initialMatch.images };
+        }
+        // Fallback for custom items if truncated
+        const validImages = (prod.images || []).filter((img) => 
+          typeof img === 'string' && !img.includes('[truncated]') && !img.includes('...[') && img.length > 50
+        );
+        if (validImages.length > 0) {
+          return { ...prod, images: validImages };
+        }
+        return {
+          ...prod,
+          images: ['https://images.unsplash.com/photo-1542838132-92c53300491e?w=800&auto=format&fit=crop&q=80'],
+        };
+      }
+      return prod;
+    });
+
+    if (changed) {
+      this.set(STORAGE_KEYS.PRODUCTS, cleaned);
+    }
+    return cleaned;
   }
 
   setProducts(products: Product[]): void {
-    this.set(STORAGE_KEYS.PRODUCTS, products);
+    const cleaned = (products || []).map((prod) => {
+      const initialMatch = INITIAL_PRODUCTS.find((ip) => ip.id === prod.id);
+      const isCorrupt = !prod.images || !prod.images[0] || 
+        typeof prod.images[0] !== 'string' || 
+        prod.images[0].includes('[truncated]') || 
+        prod.images[0].includes('...[');
+
+      if (isCorrupt && initialMatch && initialMatch.images) {
+        return { ...prod, images: initialMatch.images };
+      }
+      return prod;
+    });
+    this.set(STORAGE_KEYS.PRODUCTS, cleaned);
   }
 
   saveProduct(product: Product): void {

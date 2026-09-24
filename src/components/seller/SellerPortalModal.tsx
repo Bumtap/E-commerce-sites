@@ -677,10 +677,14 @@ export const SellerPortalModal: React.FC = () => {
         ? Math.round(((editPrice - editSalePrice) / editPrice) * 100)
         : undefined;
 
+    const finalCategory = editCategory || editingProduct.category || categories[0]?.name || 'Groceries & Staples';
+    const matchedCategory = categories.find((c) => c.name === finalCategory);
+    const finalCategoryId = matchedCategory ? matchedCategory.id : finalCategory.toLowerCase().replace(/[^a-z0-9]/g, '-');
+
     updateProduct(editingProduct.id, {
       name: editName.trim(),
-      category: editCategory,
-      categoryId: editCategory.toLowerCase().replace(/[^a-z0-9]/g, '-'),
+      category: finalCategory,
+      categoryId: finalCategoryId,
       price: Number(editPrice),
       salePrice: editSalePrice ? Number(editSalePrice) : undefined,
       discountPercentage,
@@ -702,6 +706,10 @@ export const SellerPortalModal: React.FC = () => {
     e.preventDefault();
     if (!name.trim()) return;
 
+    const finalCategory = category || currentSeller.category || categories[0]?.name || 'Groceries & Staples';
+    const matchedCategory = categories.find((c) => c.name === finalCategory);
+    const finalCategoryId = matchedCategory ? matchedCategory.id : finalCategory.toLowerCase().replace(/[^a-z0-9]/g, '-');
+
     const newProd = addProduct({
       name: name.trim(),
       slug: name.toLowerCase().replace(/\s+/g, '-'),
@@ -710,8 +718,8 @@ export const SellerPortalModal: React.FC = () => {
       price: Number(price),
       salePrice: salePrice ? Number(salePrice) : undefined,
       discountPercentage: salePrice ? Math.round(((price - salePrice) / price) * 100) : undefined,
-      category,
-      categoryId: category.toLowerCase().replace(/[^a-z0-9]/g, '-'),
+      category: finalCategory,
+      categoryId: finalCategoryId,
       sellerId: currentSeller.storeId,
       sellerName: currentSeller.storeName,
       sellerVerified: currentSeller.isVerified,
@@ -1004,13 +1012,14 @@ export const SellerPortalModal: React.FC = () => {
                       <select
                         value={editCategory}
                         onChange={(e) => setEditCategory(e.target.value)}
-                        className="w-full bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-900 dark:text-slate-100 outline-none focus:ring-2 focus:ring-teal-600"
+                        className="w-full bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-900 dark:text-slate-100 outline-none focus:ring-2 focus:ring-teal-600 cursor-pointer"
+                        required
                       >
-                        <option value="Groceries & Organic Produce">Groceries & Organic Produce</option>
-                        <option value="Bhutanese Handicrafts & Textiles">Bhutanese Handicrafts & Textiles</option>
-                        <option value="Mindful Living & Wellness">Mindful Living & Wellness</option>
-                        <option value="Daily Essentials & Fresh Foods">Daily Essentials & Fresh Foods</option>
-                        <option value="Eco-Tech & Smart Living">Eco-Tech & Smart Living</option>
+                        {categories.map((c) => (
+                          <option key={c.id} value={c.name}>
+                            {c.name}
+                          </option>
+                        ))}
                       </select>
                     </div>
                   </div>
@@ -1182,15 +1191,16 @@ export const SellerPortalModal: React.FC = () => {
                         Category
                       </label>
                       <select
-                        value={category}
+                        value={category || currentSeller?.category || (categories[0]?.name ?? '')}
                         onChange={(e) => setCategory(e.target.value)}
-                        className="w-full bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-900 dark:text-slate-100 outline-none focus:ring-2 focus:ring-teal-600"
+                        className="w-full bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-900 dark:text-slate-100 outline-none focus:ring-2 focus:ring-teal-600 cursor-pointer"
+                        required
                       >
-                        <option value="Groceries & Organic Produce">Groceries & Organic Produce</option>
-                        <option value="Bhutanese Handicrafts & Textiles">Bhutanese Handicrafts & Textiles</option>
-                        <option value="Mindful Living & Wellness">Mindful Living & Wellness</option>
-                        <option value="Daily Essentials & Fresh Foods">Daily Essentials & Fresh Foods</option>
-                        <option value="Eco-Tech & Smart Living">Eco-Tech & Smart Living</option>
+                        {categories.map((c) => (
+                          <option key={c.id} value={c.name}>
+                            {c.name}
+                          </option>
+                        ))}
                       </select>
                     </div>
                   </div>
