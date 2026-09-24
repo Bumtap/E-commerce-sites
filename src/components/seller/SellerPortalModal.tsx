@@ -4,6 +4,11 @@ import { formatNu, formatDateTime } from '../../utils/format';
 import { Product, OrderStatus } from '../../types';
 import { ImageUpload } from '../common/ImageUpload';
 import {
+  STORE_LOGO_PRESETS,
+  STORE_COVER_PRESETS,
+  PRODUCT_IMAGE_PRESETS
+} from '../../data/imagePresets';
+import {
   X,
   Store,
   Package,
@@ -35,20 +40,6 @@ import {
   Camera,
   Image as ImageIcon
 } from 'lucide-react';
-
-const STORE_LOGO_PRESETS = [
-  { name: 'Heritage Seal', url: 'https://images.unsplash.com/photo-1544717302-de2939b7ef71?w=200&auto=format&fit=crop&q=80' },
-  { name: 'Organic Harvest', url: 'https://images.unsplash.com/photo-1615485500704-8e990f9900f7?w=200&auto=format&fit=crop&q=80' },
-  { name: 'Weaving Emblem', url: 'https://images.unsplash.com/photo-1606760227091-3dd870d97f1d?w=200&auto=format&fit=crop&q=80' },
-  { name: 'Himalayan Bee', url: 'https://images.unsplash.com/photo-1587049352846-4a222e784d38?w=200&auto=format&fit=crop&q=80' },
-];
-
-const STORE_COVER_PRESETS = [
-  { name: 'GMC Terraces', url: 'https://images.unsplash.com/photo-1500937386664-56d1dfef3854?w=1200&auto=format&fit=crop&q=80' },
-  { name: 'Himalayan Mist', url: 'https://images.unsplash.com/photo-1464822759023-fed622ff2c3b?w=1200&auto=format&fit=crop&q=80' },
-  { name: 'Traditional Loom', url: 'https://images.unsplash.com/photo-1528458909336-e7a0adfed0a5?w=1200&auto=format&fit=crop&q=80' },
-  { name: 'Zen Architecture', url: 'https://images.unsplash.com/photo-1513694203232-719a280e022f?w=1200&auto=format&fit=crop&q=80' },
-];
 
 export const SellerPortalModal: React.FC = () => {
   const {
@@ -726,7 +717,7 @@ export const SellerPortalModal: React.FC = () => {
       sellerVerified: currentSeller.isVerified,
       images: [
         imageUrl.trim() ||
-          'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=600&auto=format&fit=crop&q=80',
+          PRODUCT_IMAGE_PRESETS[0].url,
       ],
       rating: 5.0,
       reviewCount: 1,
@@ -1100,15 +1091,14 @@ export const SellerPortalModal: React.FC = () => {
                   </div>
 
                   <div>
-                    <label className="text-[11px] font-bold text-slate-700 dark:text-slate-300 block mb-1">
-                      Product Image URL
-                    </label>
-                    <input
-                      type="url"
+                    <ImageUpload
+                      id="seller-edit-product-image"
+                      label="Product Display Photo"
+                      sublabel="Upload photo directly from your local computer, drag & drop, or choose a sample"
                       value={editImageUrl}
-                      onChange={(e) => setEditImageUrl(e.target.value)}
-                      placeholder="https://..."
-                      className="w-full bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-900 dark:text-slate-100 outline-none focus:ring-2 focus:ring-teal-600"
+                      onChange={setEditImageUrl}
+                      variant="product"
+                      presets={PRODUCT_IMAGE_PRESETS}
                     />
                   </div>
 
@@ -1260,15 +1250,14 @@ export const SellerPortalModal: React.FC = () => {
                   </div>
 
                   <div>
-                    <label className="text-[11px] font-bold text-slate-700 dark:text-slate-300 block mb-1">
-                      Image URL (Unsplash or image link)
-                    </label>
-                    <input
-                      type="url"
+                    <ImageUpload
+                      id="seller-add-product-image"
+                      label="Product Display Photo"
+                      sublabel="Upload photo directly from your local computer, drag & drop, or choose a sample"
                       value={imageUrl}
-                      onChange={(e) => setImageUrl(e.target.value)}
-                      placeholder="https://images.unsplash.com/..."
-                      className="w-full bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-900 dark:text-slate-100 outline-none focus:ring-2 focus:ring-teal-600"
+                      onChange={setImageUrl}
+                      variant="product"
+                      presets={PRODUCT_IMAGE_PRESETS}
                     />
                   </div>
 

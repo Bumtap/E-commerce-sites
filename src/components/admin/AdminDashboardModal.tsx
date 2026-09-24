@@ -2415,10 +2415,10 @@ export const AdminDashboardModal: React.FC = () => {
                   <ImageUpload
                     id="admin-product-image"
                     label="Product Display Photo"
-                    sublabel="High quality photo of the product"
+                    sublabel="Upload photo directly from local computer, drag & drop, or pick a sample"
                     value={productFormData.imageUrl}
                     onChange={(url) => setProductFormData({ ...productFormData, imageUrl: url })}
-                    variant="cover"
+                    variant="product"
                     presets={PRODUCT_IMAGE_PRESETS}
                   />
                 </div>
